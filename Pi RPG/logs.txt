@@ -1,7 +1,0 @@
-	•	Reorganized the project structure to make it more scalable and better suited as the project grows.
-	•	Renamed the project to Pi RPG (it was previously called “game test”).
-	•	Refactored the player character: optimized the code and removed unnecessary parts.
-	•	Added collisions to the map and the player.
-	•	Added a camera that stays within the map boundaries.
-	•	Added an attack system and a modular projectile system.
-	•	Replaced the old map with one using the project’s tileset.
