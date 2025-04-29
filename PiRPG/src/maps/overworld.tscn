@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=4 uid="uid://d2ladwemgvwhy"]
+[gd_scene load_steps=8 format=4 uid="uid://d2ladwemgvwhy"]
 
 [ext_resource type="Script" uid="uid://i1xsmj3dw42s" path="res://src/maps/map.gd" id="1_3pkei"]
 [ext_resource type="Texture2D" uid="uid://dof7qmco2n6j6" path="res://assets/sprites/environment/tilesets/tileset_kscav.png" id="3_hfqwy"]
 [ext_resource type="PackedScene" uid="uid://bxbbu2a4pgk10" path="res://src/player/player.tscn" id="4_lqb4u"]
+[ext_resource type="PackedScene" uid="uid://bgqb3yiarx0wk" path="res://src/system/ui/hud.tscn" id="5_3pkei"]
 [ext_resource type="Script" uid="uid://bva6fcv3l2j8r" path="res://src/system/camera/camera.gd" id="5_q76ag"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_lx7qf"]
@@ -742,3 +743,5 @@ position = Vector2(158.8, 104.266)
 [node name="Camera2D" type="Camera2D" parent="Player"]
 zoom = Vector2(2, 2)
 script = ExtResource("5_q76ag")
+
+[node name="HUD" parent="." instance=ExtResource("5_3pkei")]
