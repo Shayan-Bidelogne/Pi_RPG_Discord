@@ -28,7 +28,7 @@ func _ready() -> void:
 	# Default animation
 	play_anim("idle_", Vector2.DOWN)
 	# Snap base position to grid.
-	position = position.snappedf(Global.TILE_SIZE * 0.5)
+	position = position.snappedf(Global.TILE_SIZE)
 
 
 func _physics_process(_delta: float) -> void:
@@ -74,14 +74,20 @@ func update_input_stack():
 
 
 func try_move(direction: Vector2) -> void:
-	var target: Vector2 = position + direction * Global.TILE_SIZE
-
+	var target: Vector2 = global_position + Vector2.ONE * (Global.TILE_SIZE * 0.5) + direction * Global.TILE_SIZE
+	
+	# Debug purpose
+	$Icon.global_position = target
+	
+	# Before we were using intersect_ray, don't hesitate to use it back if needed
+	#PhysicsPointQueryParameters2D.create(global_position, target, collision_mask, [self])
 	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(global_position, target, collision_mask, [self])
-	var result: Dictionary = space_state.intersect_ray(query)
+	var query: PhysicsPointQueryParameters2D = PhysicsPointQueryParameters2D.new()
+	query.position = target
 
+	var result: Array[Dictionary] = space_state.intersect_point(query)
 	if result.is_empty():
-		start_movement(target)
+		start_movement(global_position + direction * Global.TILE_SIZE)
 	else:
 		play_anim("idle_", direction)
 

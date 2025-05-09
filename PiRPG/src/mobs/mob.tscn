@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3 uid="uid://bee61jec5doox"]
+
+[ext_resource type="Script" uid="uid://btlcdvusvars8" path="res://src/mobs/mob.gd" id="1_7o3l0"]
+[ext_resource type="Texture2D" uid="uid://cxv8n47fwodam" path="res://icon.svg" id="2_jopy2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_jopy2"]
+size = Vector2(16, 16)
+
+[node name="Mob" type="CharacterBody2D"]
+script = ExtResource("1_7o3l0")
+
+[node name="MobSprite" type="Sprite2D" parent="."]
+position = Vector2(0, 2.38419e-07)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("2_jopy2")
+centered = false
+
+[node name="MobInfoLabel" type="Label" parent="."]
+offset_left = -32.0
+offset_top = -24.0
+offset_right = 51.0
+offset_bottom = -4.0
+theme_override_constants/line_spacing = -4
+theme_override_font_sizes/font_size = 8
+text = "Mob name: Unknown
+Health: 10.0"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(8, 8)
+shape = SubResource("RectangleShape2D_jopy2")

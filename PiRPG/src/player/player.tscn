@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://bxbbu2a4pgk10"]
+[gd_scene load_steps=21 format=3 uid="uid://bxbbu2a4pgk10"]
 
 [ext_resource type="Texture2D" uid="uid://b4apl3aydiptx" path="res://assets/sprites/player/ACharDown1.png" id="1_5qd7s"]
 [ext_resource type="Script" uid="uid://bcgolhswpy5m2" path="res://src/player/player.gd" id="1_eca5r"]
@@ -17,6 +17,7 @@
 [ext_resource type="Texture2D" uid="uid://ttaxcmqa7xbx" path="res://assets/sprites/player/ACharUp2.png" id="14_d74iv"]
 [ext_resource type="Texture2D" uid="uid://18u51fl5frwg" path="res://assets/sprites/player/ACharUp3.png" id="15_2iw0f"]
 [ext_resource type="Texture2D" uid="uid://dl2pfwtxvy1e0" path="res://assets/sprites/player/ACharUp4.png" id="16_ndm7g"]
+[ext_resource type="Texture2D" uid="uid://cxv8n47fwodam" path="res://icon.svg" id="18_oyld2"]
 
 [sub_resource type="SpriteFrames" id="SpriteFrames_boppf"]
 animations = [{
@@ -117,7 +118,14 @@ script = ExtResource("1_eca5r")
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 sprite_frames = SubResource("SpriteFrames_boppf")
-animation = &"idle_up"
+animation = &"idle_down"
+centered = false
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(8, 8)
 shape = SubResource("RectangleShape2D_a6i1j")
+
+[node name="Icon" type="Sprite2D" parent="."]
+position = Vector2(12, -16)
+scale = Vector2(0.05, 0.05)
+texture = ExtResource("18_oyld2")
