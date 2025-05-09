@@ -1,6 +1,8 @@
 extends Node
 ## Global.gd autoload
 
+const TILE_SIZE: int = 16
+
 var version: String = "1.0.0"
 
 var settings: Dictionary = {

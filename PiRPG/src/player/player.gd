@@ -2,32 +2,38 @@ class_name Player
 extends CharacterBody2D
 
 
-const TILE_SIZE: int = 16
-
+# Movements
 @export var move_duration: float = 0.2
 
 var is_moving: float = false
-
 var input_stack: Array[String] = []
-
 var input_vector: Vector2
 var last_input_vector: Vector2
 
+# Gameplay
+var stats: Dictionary = {
+	"health": 10.0,
+}
+var progression: Dictionary = {
+	"level": 0,
+	"experience": 0.0,
+	"experience_required": 50.0
+}
 var team: int
 
 @onready var animation_player: AnimatedSprite2D = $AnimatedSprite2D
 
 
 func _ready() -> void:
+	# Default animation
 	play_anim("idle_", Vector2.DOWN)
 	# Snap base position to grid.
-	position = position.snappedf(TILE_SIZE / 2)
+	position = position.snappedf(Global.TILE_SIZE * 0.5)
 
 
 func _physics_process(_delta: float) -> void:
 	if is_moving:
 		return
-	#input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	input_vector = Vector2.ZERO
 
 	# Update stack based on pressed inputs
@@ -68,7 +74,7 @@ func update_input_stack():
 
 
 func try_move(direction: Vector2) -> void:
-	var target: Vector2 = position + direction * TILE_SIZE
+	var target: Vector2 = position + direction * Global.TILE_SIZE
 
 	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(global_position, target, collision_mask, [self])
