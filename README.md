@@ -37,7 +37,7 @@ Players must master their spells, not only for combat but for solving puzzles an
 - **Shayan-Bidelogne** – Game Creator  
 - **22luna** – Developer & Designer  
 - **Karma** - Godot Developer
-- **knya** – Godot Developer
+- **knyaz** – Godot Developer
 
 ---
 
