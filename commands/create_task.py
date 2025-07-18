@@ -37,26 +37,11 @@ async def create_task(interaction: discord.Interaction, title: str, description:
         await interaction.followup.send("❌ The selected channel is not available.", ephemeral=True)
         return
 
-    # Sélection de la carte à utiliser pour la tâche
-    card_options = [discord.SelectOption(label=card, value=card) for card in config.CARDS]
-    card_select = Select(placeholder="Choose a card...", options=card_options, custom_id="card_select")
-
-    view = View()
-    view.add_item(card_select)
-
-    await interaction.followup.send(f"🌍 Now choose a map for the task **{title}**:", view=view, ephemeral=True)
-
-    # Attente de la sélection de la carte par l'utilisateur
-    select_card = await interaction.client.wait_for("interaction", check=check)
-    card_name = select_card.data['values'][0]
-
     # Création du message embed pour la tâche
     embed = discord.Embed(title=f"{title}", description=description, color=0xF4E3C7)
     embed.set_thumbnail(url="https://example.com/image.png")
     embed.add_field(name="👤 Assigned to", value="None", inline=True)
     embed.add_field(name="🔄️ Status", value="To Do", inline=True)
-    embed.add_field(name="🌍 Map", value=card_name, inline=True)
-
     # Envoi du message dans le canal
     message = await channel.send(embed=embed)
     await interaction.followup.send(f"✅ Task **{title}** created in {channel.mention} with card **{card_name}**.", ephemeral=True)
