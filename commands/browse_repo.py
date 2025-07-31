@@ -5,7 +5,6 @@ from discord.ext import commands
 import aiohttp
 from dotenv import load_dotenv
 
-# Chargement .env uniquement si on est en local
 if os.path.exists(".env"):
     load_dotenv()
 
@@ -40,16 +39,21 @@ class BrowseRepo(commands.Cog):
 
         content = "\n".join(files) if files else "📂 Aucun fichier."
 
-        options = [
-            discord.SelectOption(label=dir['name'], value=dir['path'], description="📁 Dossier")
-            for dir in dirs
-        ]
+        # Création d'une map id->path pour stocker les chemins complets
+        id_to_path = {}
+        options = []
+        for i, dir in enumerate(dirs):
+            key = str(i)  # un simple index en string, toujours <100 chars
+            id_to_path[key] = dir['path']
+            options.append(discord.SelectOption(label=dir['name'], value=key, description="📁 Dossier"))
 
+        # Option "Retour" avec une valeur fixe (parent folder path)
         if path:
             parent = "/".join(path.split("/")[:-1])
-            options.append(discord.SelectOption(label="🔙 Retour", value=parent or "", description="Revenir"))
+            id_to_path["back"] = parent or ""
+            options.append(discord.SelectOption(label="🔙 Retour", value="back", description="Revenir"))
 
-        view = FolderSelectView(options, self, interaction.user)
+        view = FolderSelectView(options, self, interaction.user, id_to_path)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(content=f"**📁 {path or 'racine'}**\n\n{content}", view=view)
@@ -58,22 +62,26 @@ class BrowseRepo(commands.Cog):
 
 
 class FolderSelectView(discord.ui.View):
-    def __init__(self, options, cog, user):
+    def __init__(self, options, cog, user, id_to_path):
         super().__init__(timeout=120)
-        self.add_item(FolderSelect(options, cog, user))
+        self.id_to_path = id_to_path
+        self.add_item(FolderSelect(options, cog, user, id_to_path))
 
 
 class FolderSelect(discord.ui.Select):
-    def __init__(self, options, cog, user):
+    def __init__(self, options, cog, user, id_to_path):
         self.cog = cog
         self.user = user
-        super().__init__(placeholder="Choisis un dossier", options=options)
+        self.id_to_path = id_to_path
+        super().__init__(placeholder="Choisis un dossier", options=options, max_values=1, min_values=1)
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user.id:
             await interaction.response.send_message("🚫 Tu ne peux pas utiliser ce menu.", ephemeral=True)
             return
-        await self.cog.show_folder(interaction, self.values[0])
+        selected_id = self.values[0]
+        selected_path = self.id_to_path.get(selected_id, "")
+        await self.cog.show_folder(interaction, selected_path)
 
 
 async def setup(bot):
