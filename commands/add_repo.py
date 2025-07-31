@@ -176,6 +176,9 @@ class FolderChoiceView(discord.ui.View):
             await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
             return
 
+        # CORRECTION ICI : defers l'interaction avant le followup
+        await interaction.response.defer(ephemeral=True)
+
         upload_listener = UploadListener(self.cog, self.user, self.folder_path)
         await upload_listener.wait_for_upload(interaction)
         if not upload_listener.file_attachment:
@@ -206,6 +209,7 @@ class UploadListener:
         self.file_attachment = None
 
     async def wait_for_upload(self, interaction: discord.Interaction):
+        # Le message est followup car interaction est déjà deferred
         await interaction.followup.send(f"➡️ Please send the file to upload to `{self.folder_path}` in this channel within 2 minutes.", ephemeral=True)
 
         def check(m: discord.Message):
@@ -220,53 +224,62 @@ class UploadListener:
             self.file_attachment = message.attachments[0]
         except asyncio.TimeoutError:
             await interaction.followup.send("⏰ Time is up, upload cancelled.", ephemeral=True)
+            self.file_attachment = None
 
 
 class UploadConfirmView(discord.ui.View):
-    def __init__(self, cog, user, full_path, attachment):
+    def __init__(self, cog, user, path, attachment):
         super().__init__(timeout=120)
         self.cog = cog
         self.user = user
-        self.full_path = full_path
+        self.path = path
         self.attachment = attachment
 
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
-    async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
             await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
-        file_bytes = await self.attachment.read()
 
-        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{self.full_path}"
+        # Télécharge le fichier depuis Discord
+        file_bytes = await self.attachment.read()
+        content_base64 = base64.b64encode(file_bytes).decode()
+
+        # Prépare la payload pour GitHub API (PUT content)
+        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{self.path}"
         headers = {
             "Authorization": f"Bearer {GITHUB_TOKEN}",
             "Accept": "application/vnd.github.v3+json"
         }
 
+        # Vérifie si le fichier existe déjà pour récupérer le sha (nécessaire pour update)
+        sha = None
         async with aiohttp.ClientSession() as session:
-            # Get SHA if file exists for update
             async with session.get(url, headers=headers) as resp:
-                data = await resp.json()
-                sha = data.get("sha") if resp.status == 200 else None
+                if resp.status == 200:
+                    data = await resp.json()
+                    sha = data.get("sha")
 
-            payload = {
-                "message": f"Upload file {self.attachment.filename}",
-                "content": base64.b64encode(file_bytes).decode("utf-8")
-            }
-            if sha:
-                payload["sha"] = sha
+        payload = {
+            "message": f"Add or update file {self.path} via Discord bot",
+            "content": content_base64,
+        }
+        if sha:
+            payload["sha"] = sha
 
-            async with session.put(url, headers=headers, json=payload) as resp_put:
-                if resp_put.status in (200, 201):
-                    await interaction.followup.send(f"✅ File **{self.attachment.filename}** added/replaced in `{self.full_path.rsplit('/',1)[0]}`.", ephemeral=True)
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, headers=headers, json=payload) as resp:
+                if resp.status in (200, 201):
+                    await interaction.followup.send(f"✅ File `{self.path}` uploaded successfully.", ephemeral=True)
                 else:
-                    await interaction.followup.send("❌ Error uploading file to GitHub.", ephemeral=True)
+                    err_text = await resp.text()
+                    await interaction.followup.send(f"❌ Failed to upload file. HTTP {resp.status}: {err_text}", ephemeral=True)
         self.stop()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
-    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
             await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
             return
