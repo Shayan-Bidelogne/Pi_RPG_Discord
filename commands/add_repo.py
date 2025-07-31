@@ -218,14 +218,20 @@ class UploadListener:
         )
 
         def check(m: discord.Message):
-            result = (
+            # Log pour debug
+            print(f"[UploadListener] Message reçu de {m.author}: {m.content}, Attachments: {len(m.attachments)}")
+            # Vérifie que l'utilisateur est le bon, le salon est le bon, et qu'il y a au moins un fichier
+            if (
                 m.author.id == self.user.id and
                 m.channel.id == channel.id and
-                len(m.attachments) == 1
-            )
-            if result:
-                print(f"[UploadListener] File received: {m.attachments[0].filename}")
-            return result
+                len(m.attachments) > 0
+            ):
+                # Vérifie que le fichier est bien téléchargeable
+                attachment = m.attachments[0]
+                print(f"[UploadListener] Attachment trouvé: {attachment.filename}, ContentType: {attachment.content_type}")
+                # Optionnel: tu peux filtrer par type MIME si besoin
+                return True
+            return False
 
         try:
             message = await self.cog.bot.wait_for("message", timeout=120.0, check=check)
