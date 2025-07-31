@@ -20,8 +20,8 @@ class GithubAdd(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="github_add", description="Browse and upload files to GitHub repo")
-    async def github_add(self, interaction: discord.Interaction):
+    @app_commands.command(name="github", description="Browse and upload files to GitHub repo")
+    async def github(self, interaction: discord.Interaction):
         await self.show_folder(interaction, "")
 
     async def show_folder(self, interaction, path: str):
