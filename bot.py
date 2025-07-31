@@ -29,6 +29,7 @@ if not TOKEN:
 
 # ✅ Intents nécessaires pour les événements Discord
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ✅ Planificateur de tâches (tweets programmés)
