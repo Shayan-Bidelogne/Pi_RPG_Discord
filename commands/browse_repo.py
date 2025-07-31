@@ -86,12 +86,59 @@ class BrowseRepo(commands.Cog):
         else:
             await interaction.response.send_message(f"**📂 {breadcrumb}**\n\n{content}", view=view, ephemeral=True)
 
-
 class FolderSelectView(discord.ui.View):
-    def __init__(self, options, cog, user, id_to_item):
+    def __init__(self, all_options, cog, user, id_to_path, page=0):
         super().__init__(timeout=120)
-        self.id_to_item = id_to_item
-        self.add_item(FolderSelect(options, cog, user, id_to_item))
+        self.cog = cog
+        self.user = user
+        self.id_to_path = id_to_path
+        self.all_options = all_options
+        self.page = page
+        self.max_per_page = 25
+
+        self.update_select()
+
+    def update_select(self):
+        start = self.page * self.max_per_page
+        end = start + self.max_per_page
+        page_options = self.all_options[start:end]
+
+        # Remove old select if exists
+        for child in self.children:
+            if isinstance(child, FolderSelect):
+                self.remove_item(child)
+                break
+
+        self.add_item(FolderSelect(page_options, self.cog, self.user, self.id_to_path))
+
+        # Add pagination buttons if needed
+        self.clear_items()  # clear buttons + selects
+        self.add_item(FolderSelect(page_options, self.cog, self.user, self.id_to_path))
+
+        if self.page > 0:
+            self.add_item(discord.ui.Button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary, custom_id="prev"))
+        if end < len(self.all_options):
+            self.add_item(discord.ui.Button(label="Suivant ➡️", style=discord.ButtonStyle.secondary, custom_id="next"))
+
+    @discord.ui.button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary, custom_id="prev")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("🚫 Tu ne peux pas utiliser ce bouton.", ephemeral=True)
+            return
+        if self.page > 0:
+            self.page -= 1
+            self.update_select()
+            await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="Suivant ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("🚫 Tu ne peux pas utiliser ce bouton.", ephemeral=True)
+            return
+        if (self.page + 1) * self.max_per_page < len(self.all_options):
+            self.page += 1
+            self.update_select()
+            await interaction.response.edit_message(view=self)
 
 
 class FolderSelect(discord.ui.Select):
