@@ -208,23 +208,34 @@ class UploadListener:
         self.folder_path = folder_path
         self.file_attachment = None
 
-    async def wait_for_upload(self, interaction: discord.Interaction):
-        # Le message est followup car interaction est déjà deferred
-        await interaction.followup.send(f"➡️ Please send the file to upload to `{self.folder_path}` in this channel within 2 minutes.", ephemeral=True)
+async def wait_for_upload(self, interaction: discord.Interaction):
+    channel = interaction.channel or await self.cog.bot.fetch_channel(interaction.channel_id)
 
-        def check(m: discord.Message):
-            return (
-                m.author.id == self.user.id and
-                m.channel.id == interaction.channel.id and
-                len(m.attachments) == 1
-            )
+    print(f"[UploadListener] Waiting for upload in channel {channel.id}")
 
-        try:
-            message = await self.cog.bot.wait_for("message", timeout=120.0, check=check)
-            self.file_attachment = message.attachments[0]
-        except asyncio.TimeoutError:
-            await interaction.followup.send("⏰ Time is up, upload cancelled.", ephemeral=True)
-            self.file_attachment = None
+    await interaction.followup.send(
+        f"➡️ Please send the file to upload to `{self.folder_path}` in this channel within 2 minutes.",
+        ephemeral=True
+    )
+
+    def check(m: discord.Message):
+        result = (
+            m.author.id == self.user.id and
+            m.channel.id == channel.id and
+            len(m.attachments) == 1
+        )
+        if result:
+            print(f"[UploadListener] File received: {m.attachments[0].filename}")
+        return result
+
+    try:
+        message = await self.cog.bot.wait_for("message", timeout=120.0, check=check)
+        self.file_attachment = message.attachments[0]
+    except asyncio.TimeoutError:
+        print("[UploadListener] Timeout reached, no file received.")
+        await interaction.followup.send("⏰ Time is up, upload cancelled.", ephemeral=True)
+        self.file_attachment = None
+
 
 
 class UploadConfirmView(discord.ui.View):
