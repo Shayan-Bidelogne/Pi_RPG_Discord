@@ -17,7 +17,7 @@ class BrowseRepo(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="browse_repo", description="Navigue dans les dossiers du dépôt GitHub privé")
+    @app_commands.command(name="browse_repo", description="Browse folders of the private GitHub repo")
     async def browse_repo(self, interaction: discord.Interaction):
         await self.show_folder(interaction, "")
 
@@ -31,60 +31,40 @@ class BrowseRepo(commands.Cog):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
                 if resp.status != 200:
-                    await interaction.response.send_message("❌ Impossible d’accéder au dépôt GitHub.", ephemeral=True)
+                    await interaction.response.send_message("❌ Cannot access the GitHub repository.", ephemeral=True)
                     return
                 data = await resp.json()
 
-        # Séparer dossiers et fichiers
+        # Separate folders and files
         files = [item for item in data if item['type'] == "file"]
         dirs = [item for item in data if item['type'] == "dir"]
 
-        # Construction du breadcrumb (arborescence affichée)
-        breadcrumb = " / ".join(["racine"] + path.split("/")) if path else "racine"
-
-        # Texte affiché (séparation claire dossiers / fichiers)
-        content_lines = []
-        if dirs:
-            content_lines.append("📁 **Dossiers :**")
-            for d in dirs:
-                content_lines.append(f"  - {d['name']}")
-        else:
-            content_lines.append("📁 Aucun dossier.")
-
-        if files:
-            content_lines.append("\n📄 **Fichiers :**")
-            for f in files:
-                content_lines.append(f"  - {f['name']}")
-        else:
-            content_lines.append("\n📄 Aucun fichier.")
-
-        content = "\n".join(content_lines)
-
-        # Préparation du menu déroulant avec dossiers + fichiers + option retour
+        # Prepare dropdown menu with folders + files + back option
         id_to_item = {}
         options = []
 
         for i, dir in enumerate(dirs):
             key = f"d{i}"
             id_to_item[key] = {"type": "dir", "path": dir['path']}
-            options.append(discord.SelectOption(label=dir['name'], value=key, description="📁 Dossier"))
+            options.append(discord.SelectOption(label=dir['name'], value=key, description="📁 Folder"))
 
         for i, file in enumerate(files):
             key = f"f{i}"
             id_to_item[key] = {"type": "file", "path": file['path'], "name": file['name']}
-            options.append(discord.SelectOption(label=file['name'], value=key, description="📄 Fichier"))
+            options.append(discord.SelectOption(label=file['name'], value=key, description="📄 File"))
 
         if path:
             parent = "/".join(path.split("/")[:-1])
             id_to_item["back"] = {"type": "dir", "path": parent or ""}
-            options.append(discord.SelectOption(label="🔙 Retour", value="back", description="Revenir"))
+            options.append(discord.SelectOption(label="🔙 Back", value="back", description="Go back"))
 
         view = FolderSelectView(options, self, interaction.user, id_to_item)
 
         if interaction.response.is_done():
-            await interaction.edit_original_response(content=f"**📂 {breadcrumb}**\n\n{content}", view=view)
+            await interaction.edit_original_response(content=None, view=view)
         else:
-            await interaction.response.send_message(f"**📂 {breadcrumb}**\n\n{content}", view=view, ephemeral=True)
+            await interaction.response.send_message(content=None, view=view, ephemeral=True)
+
 
 class FolderSelectView(discord.ui.View):
     def __init__(self, all_options, cog, user, id_to_path, page=0):
@@ -111,29 +91,29 @@ class FolderSelectView(discord.ui.View):
 
         self.add_item(FolderSelect(page_options, self.cog, self.user, self.id_to_path))
 
-        # Add pagination buttons if needed
-        self.clear_items()  # clear buttons + selects
+        # Clear buttons + selects then add select and pagination buttons if needed
+        self.clear_items()
         self.add_item(FolderSelect(page_options, self.cog, self.user, self.id_to_path))
 
         if self.page > 0:
-            self.add_item(discord.ui.Button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary, custom_id="prev"))
+            self.add_item(discord.ui.Button(label="⬅️ Previous", style=discord.ButtonStyle.secondary, custom_id="prev"))
         if end < len(self.all_options):
-            self.add_item(discord.ui.Button(label="Suivant ➡️", style=discord.ButtonStyle.secondary, custom_id="next"))
+            self.add_item(discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary, custom_id="next"))
 
-    @discord.ui.button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary, custom_id="prev")
+    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.secondary, custom_id="prev")
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 Tu ne peux pas utiliser ce bouton.", ephemeral=True)
+            await interaction.response.send_message("🚫 You cannot use this button.", ephemeral=True)
             return
         if self.page > 0:
             self.page -= 1
             self.update_select()
             await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="Suivant ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
+    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 Tu ne peux pas utiliser ce bouton.", ephemeral=True)
+            await interaction.response.send_message("🚫 You cannot use this button.", ephemeral=True)
             return
         if (self.page + 1) * self.max_per_page < len(self.all_options):
             self.page += 1
@@ -146,41 +126,41 @@ class FolderSelect(discord.ui.Select):
         self.cog = cog
         self.user = user
         self.id_to_item = id_to_item
-        super().__init__(placeholder="Choisis un dossier ou un fichier", options=options, max_values=1, min_values=1)
+        super().__init__(placeholder="Choose a folder or a file", options=options, max_values=1, min_values=1)
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 Tu ne peux pas utiliser ce menu.", ephemeral=True)
+            await interaction.response.send_message("🚫 You cannot use this menu.", ephemeral=True)
             return
 
         selected_id = self.values[0]
         item = self.id_to_item.get(selected_id)
 
         if not item:
-            await interaction.response.send_message("❌ Sélection invalide.", ephemeral=True)
+            await interaction.response.send_message("❌ Invalid selection.", ephemeral=True)
             return
 
         if item['type'] == "dir":
-            # Naviguer dans le dossier sélectionné
+            # Navigate into the selected folder
             await self.cog.show_folder(interaction, item['path'])
 
         elif item['type'] == "file":
-            # Télécharger le fichier et l'envoyer en pièce jointe
+            # Download the file and send it as attachment
             url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{item['path']}"
             headers = {
                 "Authorization": f"Bearer {GITHUB_TOKEN}",
-                "Accept": "application/vnd.github.v3.raw"  # Contenu brut
+                "Accept": "application/vnd.github.v3.raw"  # Raw content
             }
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
-                        await interaction.response.send_message("❌ Impossible de récupérer le fichier.", ephemeral=True)
+                        await interaction.response.send_message("❌ Cannot retrieve the file.", ephemeral=True)
                         return
                     file_bytes = await resp.read()
 
             file = discord.File(fp=io.BytesIO(file_bytes), filename=item['name'])
-            await interaction.response.send_message(f"Voici le fichier **{item['name']}** :", file=file, ephemeral=True)
+            await interaction.response.send_message(f"Here is the file **{item['name']}**:", file=file, ephemeral=True)
 
 
 async def setup(bot):
