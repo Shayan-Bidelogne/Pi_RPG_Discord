@@ -202,10 +202,14 @@ class UploadListener:
         self.file_attachment = None
 
     async def wait_for_upload(self, interaction: discord.Interaction):
-        await interaction.followup.send(f"➡️ Envoie un fichier à uploader dans `{self.folder_path}`.", ephemeral=True)
+        await interaction.followup.send(f"➡️ Envoie un fichier à uploader dans `{self.folder_path}` dans ce canal dans les 2 minutes.", ephemeral=True)
 
         def check(m: discord.Message):
-            return m.author.id == self.user.id and m.channel.id == interaction.channel.id and len(m.attachments) == 1
+            return (
+                m.author.id == self.user.id and
+                m.channel.id == interaction.channel.id and
+                len(m.attachments) == 1
+            )
 
         try:
             message = await self.cog.bot.wait_for("message", timeout=120.0, check=check)
@@ -238,6 +242,7 @@ class UploadConfirmView(discord.ui.View):
         }
 
         async with aiohttp.ClientSession() as session:
+            # Récupérer SHA si le fichier existe pour update
             async with session.get(url, headers=headers) as resp:
                 data = await resp.json()
                 sha = data.get("sha") if resp.status == 200 else None
