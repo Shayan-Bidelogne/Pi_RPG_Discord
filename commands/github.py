@@ -21,6 +21,7 @@ class GithubAdd(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="github", description="Browse and upload files to GitHub repo")
+    @app_commands.checks.has_role("admin")
     async def github(self, interaction: discord.Interaction):
         await self.show_folder(interaction, "")
 
