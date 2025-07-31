@@ -274,7 +274,7 @@ class UploadConfirmView(discord.ui.View):
                     sha = data.get("sha")
 
         payload = {
-            "message": f"Add or update file {self.path} via Discord bot",
+            "message": f"Add or update file {self.path} via Discord bot (user id: {interaction.user.id})",
             "content": content_base64,
         }
         if sha:
