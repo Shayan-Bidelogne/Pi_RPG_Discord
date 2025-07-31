@@ -1,6 +1,8 @@
 class_name Player
 extends CharacterBody2D
 
+# Load other scenes (Projectiles at the moment)
+var fireball_scene = preload("res://src/system/combat/projectile/fireball.tscn")
 
 # Movements
 @export var move_duration: float = 0.2
@@ -30,10 +32,14 @@ func _ready() -> void:
 	# Snap base position to grid.
 	position = position.snappedf(Global.TILE_SIZE)
 
+func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("shoot"):
+		shoot_projectile()
 
 func _physics_process(_delta: float) -> void:
 	if is_moving:
 		return
+	
 	input_vector = Vector2.ZERO
 
 	# Update stack based on pressed inputs
@@ -72,9 +78,8 @@ func update_input_stack():
 		if directions[key] and not input_stack.has(key):
 			input_stack.append(key)
 
-
 func try_move(direction: Vector2) -> void:
-	var target: Vector2 = global_position + Vector2.ONE * (Global.TILE_SIZE * 0.5) + direction * Global.TILE_SIZE
+	var target: Vector2 = global_position + direction * Global.TILE_SIZE
 	
 	# Debug purpose
 	$Icon.global_position = target
@@ -100,11 +105,10 @@ func start_movement(target_position: Vector2) -> void:
 	tween.tween_property(self, "position", target_position, move_duration)
 	tween.finished.connect(on_move_finished)
 
-
 func on_move_finished() -> void:
 	is_moving = false
 
-
+# Handle player's animations
 func play_anim(state: String, direction: Vector2) -> void:
 	var direction_name: String = "down"
 	if direction == Vector2.LEFT:
@@ -116,3 +120,15 @@ func play_anim(state: String, direction: Vector2) -> void:
 	elif direction == Vector2.DOWN:
 		direction_name = "down"
 	animation_player.play(state + direction_name)
+
+func shoot_projectile():
+	if last_input_vector == Vector2.ZERO: # If the player does not have direction, doesn't shoot
+		return 
+	
+	# Instantiate the fireball
+	var fireball = fireball_scene.instantiate()
+	fireball.global_position = global_position + last_input_vector.normalized() # Adjusts the fireball position
+	# Set direction of the fireball
+	fireball.direction = last_input_vector
+	fireball.rotation = last_input_vector.angle()
+	get_tree().current_scene.add_child(fireball)

@@ -120,12 +120,12 @@ script = ExtResource("1_eca5r")
 sprite_frames = SubResource("SpriteFrames_boppf")
 animation = &"idle_down"
 centered = false
+offset = Vector2(-8, -8)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2(8, 8)
 shape = SubResource("RectangleShape2D_a6i1j")
 
 [node name="Icon" type="Sprite2D" parent="."]
-position = Vector2(12, -16)
+position = Vector2(4.76837e-07, -15)
 scale = Vector2(0.05, 0.05)
 texture = ExtResource("18_oyld2")
