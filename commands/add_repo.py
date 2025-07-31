@@ -47,17 +47,17 @@ class GithubAdd(commands.Cog):
         for i, dir in enumerate(dirs):
             key = f"d{i}"
             id_to_item[key] = {"type": "dir", "path": dir['path']}
-            options.append(discord.SelectOption(label=dir['name'], value=key, description="📁 Folder"))
+            options.append(discord.SelectOption(label=dir['name'], value=key, description="\ud83d\udcc1 Folder"))
 
         for i, file in enumerate(files):
             key = f"f{i}"
             id_to_item[key] = {"type": "file", "path": file['path'], "name": file['name']}
-            options.append(discord.SelectOption(label=file['name'], value=key, description="📄 File"))
+            options.append(discord.SelectOption(label=file['name'], value=key, description="\ud83d\udcc4 File"))
 
         if path:
             parent = "/".join(path.split("/")[:-1])
             id_to_item["back"] = {"type": "dir", "path": parent or ""}
-            options.append(discord.SelectOption(label="🔙 Back", value="back", description="Go back"))
+            options.append(discord.SelectOption(label="\ud83d\udd19 Back", value="back", description="Go back"))
 
         view = GithubAddView(options, self, interaction.user, id_to_item, path)
 
@@ -89,26 +89,26 @@ class GithubAddView(discord.ui.View):
 
         buttons = []
         if self.page > 0:
-            buttons.append(discord.ui.Button(label="⬅️ Previous", style=discord.ButtonStyle.secondary, custom_id="prev"))
+            buttons.append(discord.ui.Button(label="\u2b05\ufe0f Previous", style=discord.ButtonStyle.secondary, custom_id="prev"))
         if end < len(self.all_options):
-            buttons.append(discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary, custom_id="next"))
+            buttons.append(discord.ui.Button(label="Next \u27a1\ufe0f", style=discord.ButtonStyle.secondary, custom_id="next"))
 
         for button in buttons:
             self.add_item(button)
 
-    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.secondary, custom_id="prev")
+    @discord.ui.button(label="\u2b05\ufe0f Previous", style=discord.ButtonStyle.secondary, custom_id="prev")
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 You cannot use this button.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab You cannot use this button.", ephemeral=True)
             return
         self.page = max(self.page - 1, 0)
         self.update_select()
         await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
+    @discord.ui.button(label="Next \u27a1\ufe0f", style=discord.ButtonStyle.secondary, custom_id="next")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 You cannot use this button.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab You cannot use this button.", ephemeral=True)
             return
         self.page += 1
         self.update_select()
@@ -125,19 +125,19 @@ class GithubAddSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 You cannot use this menu.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab You cannot use this menu.", ephemeral=True)
             return
 
         selected_id = self.values[0]
         item = self.id_to_item.get(selected_id)
 
         if not item:
-            await interaction.response.send_message("❌ Invalid selection.", ephemeral=True)
+            await interaction.response.send_message("\u274c Invalid selection.", ephemeral=True)
             return
 
         if item['type'] == "dir":
             view = FolderChoiceView(self.cog, self.user, item['path'])
-            await interaction.response.edit_message(content=f"📂 Folder `{item['path']}` selected. What do you want to do?", view=view)
+            await interaction.response.edit_message(content=f"\ud83d\udcc2 Folder `{item['path']}` selected. What do you want to do?", view=view)
         elif item['type'] == "file":
             url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{item['path']}"
             headers = {
@@ -147,7 +147,7 @@ class GithubAddSelect(discord.ui.Select):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
-                        await interaction.response.send_message("❌ Cannot retrieve the file.", ephemeral=True)
+                        await interaction.response.send_message("\u274c Cannot retrieve the file.", ephemeral=True)
                         return
                     file_bytes = await resp.read()
 
@@ -165,7 +165,7 @@ class FolderChoiceView(discord.ui.View):
     @discord.ui.button(label="Open folder", style=discord.ButtonStyle.primary)
     async def open_folder(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab This button is not for you.", ephemeral=True)
             return
         await self.cog.show_folder(interaction, self.folder_path)
         self.stop()
@@ -173,10 +173,9 @@ class FolderChoiceView(discord.ui.View):
     @discord.ui.button(label="Upload a file here", style=discord.ButtonStyle.success)
     async def upload_file(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab This button is not for you.", ephemeral=True)
             return
 
-        # CORRECTION ICI : defers l'interaction avant le followup
         await interaction.response.defer(ephemeral=True)
 
         upload_listener = UploadListener(self.cog, self.user, self.folder_path)
@@ -189,7 +188,7 @@ class FolderChoiceView(discord.ui.View):
         confirm_view = UploadConfirmView(self.cog, self.user, full_path, upload_listener.file_attachment)
         await interaction.followup.send(
             content=(
-                f"⚠️ Upload confirmation:\n"
+                f"\u26a0\ufe0f Upload confirmation:\n"
                 f"- Path: `{full_path}`\n"
                 f"- File: `{upload_listener.file_attachment.filename}`\n"
                 "Click **Confirm** to proceed or **Cancel** to abort."
@@ -208,34 +207,33 @@ class UploadListener:
         self.folder_path = folder_path
         self.file_attachment = None
 
-async def wait_for_upload(self, interaction: discord.Interaction):
-    channel = interaction.channel or await self.cog.bot.fetch_channel(interaction.channel_id)
+    async def wait_for_upload(self, interaction: discord.Interaction):
+        channel = interaction.channel or await self.cog.bot.fetch_channel(interaction.channel_id)
 
-    print(f"[UploadListener] Waiting for upload in channel {channel.id}")
+        print(f"[UploadListener] Waiting for upload in channel {channel.id}")
 
-    await interaction.followup.send(
-        f"➡️ Please send the file to upload to `{self.folder_path}` in this channel within 2 minutes.",
-        ephemeral=True
-    )
-
-    def check(m: discord.Message):
-        result = (
-            m.author.id == self.user.id and
-            m.channel.id == channel.id and
-            len(m.attachments) == 1
+        await interaction.followup.send(
+            f"\u27a1\ufe0f Please send the file to upload to `{self.folder_path}` in this channel within 2 minutes.",
+            ephemeral=True
         )
-        if result:
-            print(f"[UploadListener] File received: {m.attachments[0].filename}")
-        return result
 
-    try:
-        message = await self.cog.bot.wait_for("message", timeout=120.0, check=check)
-        self.file_attachment = message.attachments[0]
-    except asyncio.TimeoutError:
-        print("[UploadListener] Timeout reached, no file received.")
-        await interaction.followup.send("⏰ Time is up, upload cancelled.", ephemeral=True)
-        self.file_attachment = None
+        def check(m: discord.Message):
+            result = (
+                m.author.id == self.user.id and
+                m.channel.id == channel.id and
+                len(m.attachments) == 1
+            )
+            if result:
+                print(f"[UploadListener] File received: {m.attachments[0].filename}")
+            return result
 
+        try:
+            message = await self.cog.bot.wait_for("message", timeout=120.0, check=check)
+            self.file_attachment = message.attachments[0]
+        except asyncio.TimeoutError:
+            print("[UploadListener] Timeout reached, no file received.")
+            await interaction.followup.send("\u23f0 Time is up, upload cancelled.", ephemeral=True)
+            self.file_attachment = None
 
 
 class UploadConfirmView(discord.ui.View):
@@ -249,23 +247,19 @@ class UploadConfirmView(discord.ui.View):
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab This button is not for you.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
-
-        # Télécharge le fichier depuis Discord
         file_bytes = await self.attachment.read()
         content_base64 = base64.b64encode(file_bytes).decode()
 
-        # Prépare la payload pour GitHub API (PUT content)
         url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{self.path}"
         headers = {
             "Authorization": f"Bearer {GITHUB_TOKEN}",
             "Accept": "application/vnd.github.v3+json"
         }
 
-        # Vérifie si le fichier existe déjà pour récupérer le sha (nécessaire pour update)
         sha = None
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
@@ -283,18 +277,18 @@ class UploadConfirmView(discord.ui.View):
         async with aiohttp.ClientSession() as session:
             async with session.put(url, headers=headers, json=payload) as resp:
                 if resp.status in (200, 201):
-                    await interaction.followup.send(f"✅ File `{self.path}` uploaded successfully.", ephemeral=True)
+                    await interaction.followup.send(f"\u2705 File `{self.path}` uploaded successfully.", ephemeral=True)
                 else:
                     err_text = await resp.text()
-                    await interaction.followup.send(f"❌ Failed to upload file. HTTP {resp.status}: {err_text}", ephemeral=True)
+                    await interaction.followup.send(f"\u274c Failed to upload file. HTTP {resp.status}: {err_text}", ephemeral=True)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("🚫 This button is not for you.", ephemeral=True)
+            await interaction.response.send_message("\ud83d\udeab This button is not for you.", ephemeral=True)
             return
-        await interaction.response.send_message("❌ Upload cancelled.", ephemeral=True)
+        await interaction.response.send_message("\u274c Upload cancelled.", ephemeral=True)
         self.stop()
 
 
