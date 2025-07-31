@@ -61,7 +61,7 @@ class EditRepo(commands.Cog):
             id_to_item["back"] = {"type": "dir", "path": parent or ""}
             options.append(discord.SelectOption(label="🔙 Back", value="back", description="Go back"))
 
-        view = EditRepoView(options, self, interaction.user, id_to_item, path)
+        view = CustomEditRepoView(options, self, interaction.user, id_to_item, path)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(content=None, view=view)
