@@ -58,6 +58,12 @@ class Recruitment(commands.Cog):
             f.write(str(message.id))
         print("[Recruitment] Nouveau message de recrutement envoyé.")
 
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        role = member.guild.get_role(SPECIAL_ROLE_ID)
+        if role:
+            await member.add_roles(role, reason="Automatic role on join")
+
 
 class ApplyButtonView(discord.ui.View):
     def __init__(self, cog):
