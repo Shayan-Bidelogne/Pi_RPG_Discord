@@ -26,7 +26,6 @@ class Recruitment(commands.Cog):
             print(f"[Recruitment] Channel ID {self.channel_id} introuvable.")
             return
 
-        # Lire le message_id s'il existe
         message_id = None
         if os.path.exists(MESSAGE_TRACKING_FILE):
             with open(MESSAGE_TRACKING_FILE, "r") as f:
@@ -38,13 +37,12 @@ class Recruitment(commands.Cog):
         if message_id:
             try:
                 message = await channel.fetch_message(message_id)
-                await message.edit(view=ApplyButtonView(self))  # recharge les boutons
+                await message.edit(view=ApplyButtonView(self))
                 print("[Recruitment] Message initial rechargé avec succès.")
                 return
             except discord.NotFound:
                 print("[Recruitment] Ancien message non trouvé, envoi d'un nouveau.")
 
-        # Nouveau message si non trouvé
         embed = discord.Embed(
             title="🚀 Recrutement ouvert !",
             description="Clique sur **Postuler** pour démarrer ta candidature.",
@@ -52,7 +50,6 @@ class Recruitment(commands.Cog):
         )
         message = await channel.send(embed=embed, view=ApplyButtonView(self))
 
-        # Sauvegarder le nouveau message ID
         with open(MESSAGE_TRACKING_FILE, "w") as f:
             f.write(str(message.id))
         print("[Recruitment] Nouveau message de recrutement envoyé.")
@@ -127,36 +124,6 @@ class ContinueView(discord.ui.View):
             await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
             return
 
-        messages = [msg async for msg in channel.history(limit=50) if not msg.author.bot]
-
-        options = []
-        for msg in messages:
-            if msg.embeds:
-                embed = msg.embeds[0]
-                label = embed.title or "Tâche sans titre"
-            else:
-                label = msg.content[:80] or "Message vide"
-
-            options.append(discord.SelectOption(label=label[:100], value=str(msg.id)))
-
-        if not options:
-            await interaction.response.send_message("🕐 Aucune tâche disponible pour l’instant.", ephemeral=True)
-            return
-
-        view = TaskChoiceView(options)
-        await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
-
-
-    @discord.ui.button(label="Oui, je veux voir les tâches", style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = self.cog.user_roles.get(self.user.id)
-        task_channel_id = self.cog.role_channel_map.get(role)
-        channel = interaction.guild.get_channel(task_channel_id)
-
-        if not channel:
-            await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
-            return
-
         messages = [msg async for msg in channel.history(limit=50) if msg.embeds]
 
         if not messages:
@@ -164,17 +131,18 @@ class ContinueView(discord.ui.View):
             return
 
         options = []
-        for msg in messages[:25]:  # Limite Discord
+        for msg in messages[:25]:
             embed = msg.embeds[0]
             label = embed.title[:80] if embed.title else "Tâche sans titre"
             options.append(discord.SelectOption(label=label, value=str(msg.id)))
 
-        view = TaskChoiceView(options)
+        view = TaskChoiceView(options, self.user)
         await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
 
 
 class TaskSelect(discord.ui.Select):
-    def __init__(self, options):
+    def __init__(self, options, user):
+        self.user = user
         super().__init__(placeholder="Choisis une tâche :", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -182,46 +150,20 @@ class TaskSelect(discord.ui.Select):
         channel = interaction.channel
         try:
             task_msg = await channel.fetch_message(int(task_id))
-            task_link = task_msg.jump_url
-            await interaction.response.send_message(
-                f"✅ Utilise `/assign_task {task_id}` pour t’assigner cette tâche.\n🔗 {task_link}",
-                ephemeral=True
-            )
+            embed = task_msg.embeds[0]
+            embed.set_field_at(0, name="👤 Assigned to", value=self.user.mention, inline=True)
+            await task_msg.edit(embed=embed)
+            await interaction.response.send_message(f"✅ Tâche **{embed.title}** assignée à {self.user.mention}", ephemeral=True)
         except:
-            await interaction.response.send_message("❌ Impossible de récupérer la tâche.", ephemeral=True)
-
-
-    @discord.ui.button(label="Oui, je veux voir les tâches", style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = self.cog.user_roles.get(self.user.id)
-        task_channel_id = self.cog.role_channel_map.get(role)
-        channel = interaction.guild.get_channel(task_channel_id)
-
-        if not channel:
-            await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
-            return
-
-        messages = [msg async for msg in channel.history(limit=20) if not msg.author.bot]
-        if not messages:
-            await interaction.response.send_message("🕐 Aucune tâche disponible pour l’instant.", ephemeral=True)
-            return
-
-        options = [
-            discord.SelectOption(label=msg.content[:80], value=str(msg.id))
-            for msg in messages[:25]  # Discord limite à 25 options
-        ]
-
-        view = TaskChoiceView(options)
-        await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
+            await interaction.response.send_message("❌ Impossible de récupérer ou modifier la tâche.", ephemeral=True)
 
 
 class TaskChoiceView(discord.ui.View):
-    def __init__(self, options):
+    def __init__(self, options, user):
         super().__init__(timeout=None)
-        self.add_item(TaskSelect(options))
+        self.add_item(TaskSelect(options, user))
 
 
-# Pour charger l'extension
 async def setup(bot):
     cog = Recruitment(bot)
     await bot.add_cog(cog)
