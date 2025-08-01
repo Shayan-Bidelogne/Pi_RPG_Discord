@@ -6,8 +6,8 @@ class Recruitment(commands.Cog):
         self.bot = bot
         self.channel_id = 1400511222394126367  # Remplace avec l'ID du canal de lancement
         self.role_channel_map = {
-            "pixelart": 111111111111111111,
-            "dev": 222222222222222222,
+            "pixelart": 1355852568806293637,
+            "dev": 1363812990566006865,
             "marketing": 333333333333333333
         }
         self.user_roles = {}  # Pour mémoriser le rôle sélectionné par l'utilisateur
