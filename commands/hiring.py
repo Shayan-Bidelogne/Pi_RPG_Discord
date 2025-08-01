@@ -127,6 +127,50 @@ class ContinueView(discord.ui.View):
             await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
             return
 
+        messages = [msg async for msg in channel.history(limit=50) if msg.embeds]
+
+        if not messages:
+            await interaction.response.send_message("🕐 Aucune tâche disponible pour l’instant.", ephemeral=True)
+            return
+
+        options = []
+        for msg in messages[:25]:  # Limite Discord
+            embed = msg.embeds[0]
+            label = embed.title[:80] if embed.title else "Tâche sans titre"
+            options.append(discord.SelectOption(label=label, value=str(msg.id)))
+
+        view = TaskChoiceView(options)
+        await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
+
+
+class TaskSelect(discord.ui.Select):
+    def __init__(self, options):
+        super().__init__(placeholder="Choisis une tâche :", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        task_id = self.values[0]
+        channel = interaction.channel
+        try:
+            task_msg = await channel.fetch_message(int(task_id))
+            task_link = task_msg.jump_url
+            await interaction.response.send_message(
+                f"✅ Utilise `/assign_task {task_id}` pour t’assigner cette tâche.\n🔗 {task_link}",
+                ephemeral=True
+            )
+        except:
+            await interaction.response.send_message("❌ Impossible de récupérer la tâche.", ephemeral=True)
+
+
+    @discord.ui.button(label="Oui, je veux voir les tâches", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = self.cog.user_roles.get(self.user.id)
+        task_channel_id = self.cog.role_channel_map.get(role)
+        channel = interaction.guild.get_channel(task_channel_id)
+
+        if not channel:
+            await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
+            return
+
         messages = [msg async for msg in channel.history(limit=20) if not msg.author.bot]
         if not messages:
             await interaction.response.send_message("🕐 Aucune tâche disponible pour l’instant.", ephemeral=True)
@@ -145,18 +189,6 @@ class TaskChoiceView(discord.ui.View):
     def __init__(self, options):
         super().__init__(timeout=None)
         self.add_item(TaskSelect(options))
-
-
-class TaskSelect(discord.ui.Select):
-    def __init__(self, options):
-        super().__init__(placeholder="Choisis une tâche :", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        task_id = self.values[0]
-        await interaction.response.send_message(
-            f"✅ Utilise `/assign_task {task_id}` pour t’assigner cette tâche.",
-            ephemeral=True
-        )
 
 
 # Pour charger l'extension
