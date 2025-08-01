@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 
 MESSAGE_TRACKING_FILE = "recruitment_message_id.txt"
+SPECIAL_ROLE_ID = 1400684870686081045  # Remplace par l'ID du rôle à donner/retirer
 
 class Recruitment(commands.Cog):
     def __init__(self, bot):
@@ -63,10 +64,15 @@ class ApplyButtonView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Postuler", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Apply", style=discord.ButtonStyle.primary)
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         user = interaction.user
+
+        # Remove the special role
+        role = guild.get_role(SPECIAL_ROLE_ID)
+        if role and role in user.roles:
+            await user.remove_roles(role, reason="Role removed after application")
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -77,7 +83,7 @@ class ApplyButtonView(discord.ui.View):
             category = await guild.create_category("Tickets")
 
         ticket_channel = await guild.create_text_channel(f"ticket-{user.name}", overwrites=overwrites, category=category)
-        await ticket_channel.send(f"{user.mention}, quel rôle vous intéresse ?", view=RoleChoiceView(self.cog, user))
+        await ticket_channel.send(f"{user.mention}, which role are you interested in?", view=RoleChoiceView(self.cog, user))
 
 
 class RoleChoiceView(discord.ui.View):
