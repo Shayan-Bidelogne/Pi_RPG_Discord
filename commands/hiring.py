@@ -29,10 +29,13 @@ class Recruitment(commands.Cog):
         message_id = None
         if os.path.exists(MESSAGE_TRACKING_FILE):
             with open(MESSAGE_TRACKING_FILE, "r") as f:
+                content = f.read().strip()
+                print(f"[Recruitment] ID lu depuis le fichier : {content}")
                 try:
-                    message_id = int(f.read().strip())
+                    message_id = int(content)
                 except ValueError:
-                    pass
+                    print("[Recruitment] ID du message non valide.")
+                    message_id = None
 
         if message_id:
             try:
@@ -147,15 +150,25 @@ class TaskSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         task_id = self.values[0]
-        channel = interaction.channel
+        # Aller chercher le salon de tâches correspondant au rôle
+        role = self.view.user_roles.get(self.user.id)
+        task_channel_id = self.view.role_channel_map.get(role)
+        channel = interaction.guild.get_channel(task_channel_id)
+        if not channel:
+            await interaction.response.send_message("❌ Salon de tâches introuvable.", ephemeral=True)
+            return
         try:
             task_msg = await channel.fetch_message(int(task_id))
             embed = task_msg.embeds[0]
-            embed.set_field_at(0, name="👤 Assigned to", value=self.user.mention, inline=True)
+            # Cherche le champ "Assigned to" et le modifie
+            for i, field in enumerate(embed.fields):
+                if field.name == "👤 Assigned to":
+                    embed.set_field_at(i, name="👤 Assigned to", value=self.user.mention, inline=True)
+                    break
             await task_msg.edit(embed=embed)
             await interaction.response.send_message(f"✅ Tâche **{embed.title}** assignée à {self.user.mention}", ephemeral=True)
-        except:
-            await interaction.response.send_message("❌ Impossible de récupérer ou modifier la tâche.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Impossible de récupérer ou modifier la tâche. {e}", ephemeral=True)
 
 
 class TaskChoiceView(discord.ui.View):
