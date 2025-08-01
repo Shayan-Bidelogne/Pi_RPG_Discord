@@ -228,7 +228,8 @@ class ConfirmAssignView(discord.ui.View):
             category = await guild.create_category("Tickets")
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            self.user: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+            self.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+
         }
         new_channel = await guild.create_text_channel(f"ticket-{self.user.name}", overwrites=overwrites, category=category)
         await new_channel.send(f"{self.user.mention}, here is your assigned task:", embed=self.embed)
