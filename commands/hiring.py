@@ -182,7 +182,6 @@ class ConfirmAssignView(discord.ui.View):
 
     @discord.ui.button(label="Confirm assignment", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if already assigned
         assigned_field = None
         for i, field in enumerate(self.embed.fields):
             if field.name == "👤 Assigned to":
@@ -203,6 +202,23 @@ class ConfirmAssignView(discord.ui.View):
             f"✅ Task **{self.embed.title}** successfully assigned to {self.user.mention}.",
             ephemeral=True
         )
+        # Close current ticket channel
+        current_channel = interaction.channel
+        try:
+            await current_channel.delete(reason="Ticket closed after task assignment")
+        except Exception:
+            pass
+        # Create new ticket channel and send the embed
+        guild = interaction.guild
+        category = discord.utils.get(guild.categories, name="Tickets")
+        if not category:
+            category = await guild.create_category("Tickets")
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            self.user: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        }
+        new_channel = await guild.create_text_channel(f"ticket-{self.user.name}", overwrites=overwrites, category=category)
+        await new_channel.send(f"{self.user.mention}, here is your assigned task:", embed=self.embed)
         self.stop()
 
 
