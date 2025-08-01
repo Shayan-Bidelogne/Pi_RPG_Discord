@@ -127,6 +127,36 @@ class ContinueView(discord.ui.View):
             await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
             return
 
+        messages = [msg async for msg in channel.history(limit=50) if not msg.author.bot]
+
+        options = []
+        for msg in messages:
+            if msg.embeds:
+                embed = msg.embeds[0]
+                label = embed.title or "Tâche sans titre"
+            else:
+                label = msg.content[:80] or "Message vide"
+
+            options.append(discord.SelectOption(label=label[:100], value=str(msg.id)))
+
+        if not options:
+            await interaction.response.send_message("🕐 Aucune tâche disponible pour l’instant.", ephemeral=True)
+            return
+
+        view = TaskChoiceView(options)
+        await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
+
+
+    @discord.ui.button(label="Oui, je veux voir les tâches", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = self.cog.user_roles.get(self.user.id)
+        task_channel_id = self.cog.role_channel_map.get(role)
+        channel = interaction.guild.get_channel(task_channel_id)
+
+        if not channel:
+            await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
+            return
+
         messages = [msg async for msg in channel.history(limit=50) if msg.embeds]
 
         if not messages:
