@@ -82,7 +82,8 @@ class ApplyButtonView(discord.ui.View):
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            user: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+            user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+
         }
         category = discord.utils.get(guild.categories, name="Tickets")
         if not category:
