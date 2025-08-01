@@ -100,12 +100,12 @@ class RoleChoiceView(discord.ui.View):
 
         link = self.cog.role_doc_links.get(role)
         await interaction.response.send_message(
-            f"📄 Voici le document pour le rôle **{role}** :\n{link}",
+            f"📄 Here is the document for the role **{role}**:\n{link}",
             ephemeral=True
         )
 
         await interaction.followup.send(
-            "Souhaites-tu poursuivre et choisir une tâche ?",
+            "Do you want to continue and choose a task?",
             view=ContinueView(self.cog, self.user),
             ephemeral=True
         )
@@ -124,13 +124,13 @@ class ContinueView(discord.ui.View):
         channel = interaction.guild.get_channel(task_channel_id)
 
         if not channel:
-            await interaction.response.send_message("❌ Aucun salon de tâches trouvé.", ephemeral=True)
+            await interaction.response.send_message("❌ No task channel found.", ephemeral=True)
             return
 
         messages = [msg async for msg in channel.history(limit=50) if msg.embeds]
 
         if not messages:
-            await interaction.response.send_message("🕐 Aucune tâche disponible pour l’instant.", ephemeral=True)
+            await interaction.response.send_message("🕐 No tasks available at the moment.", ephemeral=True)
             return
 
         options = []
@@ -140,7 +140,7 @@ class ContinueView(discord.ui.View):
             options.append(discord.SelectOption(label=label, value=str(msg.id)))
 
         view = TaskChoiceView(options, self.user, self.cog)
-        await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
+        await interaction.response.send_message("Here are the available tasks:", view=view, ephemeral=True)
 
 
 class TaskSelect(discord.ui.Select):
@@ -163,7 +163,7 @@ class TaskSelect(discord.ui.Select):
             # Affiche l'embed et propose la validation
             view = ConfirmAssignView(task_msg, embed, self.user, self.cog)
             await interaction.response.send_message(
-                "Voici le détail de la tâche sélectionnée. Veux-tu valider l'assignation ?",
+                "Here is the detail of the selected task. Do you want to confirm the assignment?",
                 embed=embed,
                 view=view,
                 ephemeral=True
@@ -180,15 +180,29 @@ class ConfirmAssignView(discord.ui.View):
         self.user = user
         self.cog = cog
 
-    @discord.ui.button(label="Valider l'assignation", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Confirm assignment", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Modifie le champ "Assigned to"
+        # Check if already assigned
+        assigned_field = None
         for i, field in enumerate(self.embed.fields):
             if field.name == "👤 Assigned to":
-                self.embed.set_field_at(i, name="👤 Assigned to", value=self.user.mention, inline=True)
+                assigned_field = field
+                field_index = i
                 break
+        if assigned_field and assigned_field.value != "None":
+            await interaction.response.send_message(
+                f"❌ This task is already assigned to {assigned_field.value}.",
+                ephemeral=True
+            )
+            self.stop()
+            return
+        # Assign the user
+        self.embed.set_field_at(field_index, name="👤 Assigned to", value=self.user.mention, inline=True)
         await self.task_msg.edit(embed=self.embed)
-        await interaction.response.send_message(f"✅ Tâche **{self.embed.title}** assignée à {self.user.mention}", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Task **{self.embed.title}** successfully assigned to {self.user.mention}.",
+            ephemeral=True
+        )
         self.stop()
 
 
