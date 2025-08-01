@@ -151,7 +151,6 @@ class TaskSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         task_id = self.values[0]
-        # Utilise le cog pour accéder aux rôles et aux salons
         role = self.cog.user_roles.get(self.user.id)
         task_channel_id = self.cog.role_channel_map.get(role)
         channel = interaction.guild.get_channel(task_channel_id)
@@ -161,15 +160,36 @@ class TaskSelect(discord.ui.Select):
         try:
             task_msg = await channel.fetch_message(int(task_id))
             embed = task_msg.embeds[0]
-            # Cherche le champ "Assigned to" et le modifie
-            for i, field in enumerate(embed.fields):
-                if field.name == "👤 Assigned to":
-                    embed.set_field_at(i, name="👤 Assigned to", value=self.user.mention, inline=True)
-                    break
-            await task_msg.edit(embed=embed)
-            await interaction.response.send_message(f"✅ Tâche **{embed.title}** assignée à {self.user.mention}", ephemeral=True)
+            # Affiche l'embed et propose la validation
+            view = ConfirmAssignView(task_msg, embed, self.user, self.cog)
+            await interaction.response.send_message(
+                "Voici le détail de la tâche sélectionnée. Veux-tu valider l'assignation ?",
+                embed=embed,
+                view=view,
+                ephemeral=True
+            )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Impossible de récupérer ou modifier la tâche. {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Impossible de récupérer la tâche. {e}", ephemeral=True)
+
+
+class ConfirmAssignView(discord.ui.View):
+    def __init__(self, task_msg, embed, user, cog):
+        super().__init__(timeout=120)
+        self.task_msg = task_msg
+        self.embed = embed
+        self.user = user
+        self.cog = cog
+
+    @discord.ui.button(label="Valider l'assignation", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Modifie le champ "Assigned to"
+        for i, field in enumerate(self.embed.fields):
+            if field.name == "👤 Assigned to":
+                self.embed.set_field_at(i, name="👤 Assigned to", value=self.user.mention, inline=True)
+                break
+        await self.task_msg.edit(embed=self.embed)
+        await interaction.response.send_message(f"✅ Tâche **{self.embed.title}** assignée à {self.user.mention}", ephemeral=True)
+        self.stop()
 
 
 class TaskChoiceView(discord.ui.View):
