@@ -139,20 +139,21 @@ class ContinueView(discord.ui.View):
             label = embed.title[:80] if embed.title else "Tâche sans titre"
             options.append(discord.SelectOption(label=label, value=str(msg.id)))
 
-        view = TaskChoiceView(options, self.user)
+        view = TaskChoiceView(options, self.user, self.cog)
         await interaction.response.send_message("Voici les tâches disponibles :", view=view, ephemeral=True)
 
 
 class TaskSelect(discord.ui.Select):
-    def __init__(self, options, user):
+    def __init__(self, options, user, cog):
         self.user = user
+        self.cog = cog
         super().__init__(placeholder="Choisis une tâche :", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         task_id = self.values[0]
-        # Aller chercher le salon de tâches correspondant au rôle
-        role = self.view.user_roles.get(self.user.id)
-        task_channel_id = self.view.role_channel_map.get(role)
+        # Utilise le cog pour accéder aux rôles et aux salons
+        role = self.cog.user_roles.get(self.user.id)
+        task_channel_id = self.cog.role_channel_map.get(role)
         channel = interaction.guild.get_channel(task_channel_id)
         if not channel:
             await interaction.response.send_message("❌ Salon de tâches introuvable.", ephemeral=True)
@@ -172,9 +173,9 @@ class TaskSelect(discord.ui.Select):
 
 
 class TaskChoiceView(discord.ui.View):
-    def __init__(self, options, user):
+    def __init__(self, options, user, cog):
         super().__init__(timeout=None)
-        self.add_item(TaskSelect(options, user))
+        self.add_item(TaskSelect(options, user, cog))
 
 
 async def setup(bot):
