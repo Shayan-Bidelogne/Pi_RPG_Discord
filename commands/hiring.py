@@ -94,13 +94,18 @@ class ApplyButtonView(discord.ui.View):
             category = await guild.create_category("Tickets")
 
         ticket_channel = await guild.create_text_channel(f"ticket-{user.name}", overwrites=overwrites, category=category)
-        # Ajoute ici le message explicatif AVANT le menu des rôles
-        await ticket_channel.send(
-            f"👋 Welcome {user.mention}! This private channel will guide you through the recruitment process.\n"
-            "Please select the role you are interested in below."
-        )
-        await ticket_channel.send(f"{user.mention}, which role are you interested in?", view=RoleChoiceView(self.cog, user))
 
+        await ticket_channel.send(
+            f"👋 Welcome {user.mention}!\n\n"
+            "This private channel will guide you through our recruitment process.\n"
+            "Here's how it works:\n"
+            "1. You'll choose the role you're applying for.\n"
+            "2. You'll receive a short document explaining what we expect.\n"
+            "3. If you’re motivated, you can choose a task and try it out!\n\n"
+            "Please start by selecting the role you're interested in below 👇"
+        )
+
+        await ticket_channel.send(view=RoleChoiceView(self.cog, user))
 
 class RoleChoiceView(discord.ui.View):
     def __init__(self, cog, user):
