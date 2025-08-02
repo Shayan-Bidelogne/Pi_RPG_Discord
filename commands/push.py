@@ -4,6 +4,7 @@ from discord.ext import commands
 import os
 import io
 import json
+import base64
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -14,14 +15,14 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 TARGET_FOLDER_ID = "1RAOczLrtnsSzEQHOzV3ZyUnJS0iroF7R"
 
 def get_drive_service():
-    json_str = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if not json_str:
-        raise RuntimeError("La variable d’environnement GOOGLE_CREDENTIALS_JSON est manquante.")
-    
+    b64_str = os.getenv("GOOGLE_CREDENTIALS_B64")
+    if not b64_str:
+        raise RuntimeError("La variable d’environnement GOOGLE_CREDENTIALS_B64 est manquante.")
     try:
-        credentials_info = json.loads(json_str.replace('\\n', '\n'))
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Erreur de décodage JSON des identifiants : {e}")
+        json_bytes = base64.b64decode(b64_str)
+        credentials_info = json.loads(json_bytes)
+    except Exception as e:
+        raise RuntimeError(f"Erreur de décodage base64/JSON des identifiants : {e}")
 
     creds = service_account.Credentials.from_service_account_info(
         credentials_info,
