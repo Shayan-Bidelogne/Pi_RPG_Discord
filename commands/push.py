@@ -65,3 +65,4 @@ async def push(interaction: discord.Interaction, file: discord.Attachment):
 # Setup
 async def setup(bot: commands.Bot):
     bot.tree.add_command(push)
+# a
