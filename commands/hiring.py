@@ -12,7 +12,7 @@ class Recruitment(commands.Cog):
         self.role_channel_map = {
             "pixelart": 1355852568806293637,
             "dev": 1363812990566006865,
-            "marketing": 333333333333333333
+            "marketing": 31401139679423631430
         }
         self.user_roles = {}  # UserID -> role
         self.role_doc_links = {
@@ -55,7 +55,7 @@ class Recruitment(commands.Cog):
         embed = discord.Embed(
             title="🚀 Recruitment open!",
             description="Click **Apply** to start your application.",
-            color=discord.Color.blurple()
+            color=discord.Color(0xF3E2C6)
         )
         message = await channel.send(embed=embed, view=ApplyButtonView(self))
 
@@ -75,7 +75,7 @@ class ApplyButtonView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Apply", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="📝 Apply", style=discord.ButtonStyle.secondary)
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         user = interaction.user
@@ -144,7 +144,7 @@ class ContinueView(discord.ui.View):
         self.cog = cog
         self.user = user
 
-    @discord.ui.button(label="Oui, je veux voir les tâches", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Yes I want to do my first task !", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = self.cog.user_roles.get(self.user.id)
         task_channel_id = self.cog.role_channel_map.get(role)
