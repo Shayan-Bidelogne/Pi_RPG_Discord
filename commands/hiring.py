@@ -17,7 +17,7 @@ class Recruitment(commands.Cog):
         self.user_roles = {}  # UserID -> role
         self.role_doc_links = {
             "pixelart": "https://docs.google.com/document/d/1s-idcJdVd1y6kDG6kkLNPBaGGvPtpUEf/edit?usp=sharing&ouid=113302409645000036167&rtpof=true&sd=true",
-            "dev": "https://example.com/recrutement_dev.pdf",
+            "dev": "https://docs.google.com/document/d/1prU0PbhIUmUiqYr0yBiSSYVyY5PomqhM/edit?usp=sharing&ouid=113302409645000036167&rtpof=true&sd=true",
             "marketing": "https://example.com/recrutement_marketing.pdf"
         }
 
@@ -242,7 +242,14 @@ class ConfirmAssignView(discord.ui.View):
             category = await guild.create_category("Tickets")
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            self.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+            self.user: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                attach_files=True,          # ✅ permet d’envoyer des fichiers
+                embed_links=True            # ✅ permet d’envoyer des liens avec preview
+            )
+
 
         }
         new_channel = await guild.create_text_channel(f"ticket-{self.user.name}", overwrites=overwrites, category=category)
