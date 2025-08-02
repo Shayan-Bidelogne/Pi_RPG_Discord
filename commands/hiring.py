@@ -88,13 +88,17 @@ class ApplyButtonView(discord.ui.View):
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-
         }
         category = discord.utils.get(guild.categories, name="Tickets")
         if not category:
             category = await guild.create_category("Tickets")
 
         ticket_channel = await guild.create_text_channel(f"ticket-{user.name}", overwrites=overwrites, category=category)
+        # Ajoute ici le message explicatif AVANT le menu des rôles
+        await ticket_channel.send(
+            f"👋 Welcome {user.mention}! This private channel will guide you through the recruitment process.\n"
+            "Please select the role you are interested in below."
+        )
         await ticket_channel.send(f"{user.mention}, which role are you interested in?", view=RoleChoiceView(self.cog, user))
 
 
