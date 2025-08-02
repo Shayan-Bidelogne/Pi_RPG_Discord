@@ -24,39 +24,44 @@ class Recruitment(commands.Cog):
     async def setup(self):
         channel = self.bot.get_channel(self.channel_id)
         if not channel:
-            print(f"[Recruitment] Channel ID {self.channel_id} introuvable.")
+            print(f"[Recruitment] Channel ID {self.channel_id} not found.")
             return
 
         message_id = None
         if os.path.exists(MESSAGE_TRACKING_FILE):
             with open(MESSAGE_TRACKING_FILE, "r") as f:
                 content = f.read().strip()
-                print(f"[Recruitment] ID lu depuis le fichier : {content}")
+                print(f"[Recruitment] ID read from file: {content}")
                 try:
                     message_id = int(content)
                 except ValueError:
-                    print("[Recruitment] ID du message non valide.")
+                    print("[Recruitment] Invalid message ID in file.")
                     message_id = None
 
         if message_id:
             try:
                 message = await channel.fetch_message(message_id)
                 await message.edit(view=ApplyButtonView(self))
-                print("[Recruitment] Message initial rechargé avec succès.")
+                print("[Recruitment] Recruitment message successfully reloaded.")
                 return
             except discord.NotFound:
-                print("[Recruitment] Ancien message non trouvé, envoi d'un nouveau.")
+                print("[Recruitment] Previous message not found, sending a new one.")
+            except discord.Forbidden:
+                print("[Recruitment] Forbidden: cannot fetch or edit the message.")
+            except Exception as e:
+                print(f"[Recruitment] Unexpected error: {e}")
 
+        # Only here do we send a new message and overwrite the file
         embed = discord.Embed(
-            title="🚀 Recrutement ouvert !",
-            description="Clique sur **Postuler** pour démarrer ta candidature.",
+            title="🚀 Recruitment open!",
+            description="Click **Apply** to start your application.",
             color=discord.Color.blurple()
         )
         message = await channel.send(embed=embed, view=ApplyButtonView(self))
 
         with open(MESSAGE_TRACKING_FILE, "w") as f:
             f.write(str(message.id))
-        print("[Recruitment] Nouveau message de recrutement envoyé.")
+        print("[Recruitment] New recruitment message sent.")
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
