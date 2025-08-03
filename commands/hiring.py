@@ -97,11 +97,12 @@ class ApplyButtonView(discord.ui.View):
 
         await ticket_channel.send(
             f"👋 Welcome {user.mention}!\n\n"
-            "This private channel will guide you through our recruitment process.\n"
+            "I will guide you through our recruitment process.\n"
             "Here's how it works:\n"
             "1. You'll choose the role you're applying for.\n"
             "2. You'll receive a short document explaining what we expect.\n"
             "3. If you’re motivated, you can choose a task and try it out!\n\n"
+            "If you have any questions, feel free to ask here \n(I can answer to +140 different keyword).\n\n"
             "Please start by selecting the role you're interested in below 👇"
         )
 

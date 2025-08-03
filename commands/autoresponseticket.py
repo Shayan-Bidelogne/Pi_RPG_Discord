@@ -9,7 +9,7 @@ BEIGE_COLOR = discord.Color.from_rgb(245, 222, 179)  # Beige clair (wheat-like)
 
 # Triggers groupés → réponse unique
 TRIGGER_GROUPS = {
-    ("hello", "hi", "hey", "salut", "bonjour", "yo", "wassup", "sup"): 
+    ("hello", "hey", "salut", "bonjour"): 
         "Hi there! 👋",
 
     ("help", "support", "question", "problem", "issue"): 
@@ -34,13 +34,13 @@ TRIGGER_GROUPS = {
         "The idea is to fund an investment pool (which we own) and use the interest generated to offer players a financial incentive. There’s no promise of profit or any kind of “scam” — quite the opposite. The money players spend is held in reserve, and the interest is redistributed to them. Why this model? Because it creates a powerful snowball effect: each month, incoming funds are set aside, so the pool grows and generates more interest. On the player side, they receive an increasingly larger share over time. It’s a way to ensure the system, the game, and the incentive to keep playing are sustainable. A loyal player could potentially earn significant returns depending on how long they stay engaged. This information is not public (legal compliance).",
 
     ("members", "team", "staff", "people", "contributors"): 
-        "We're a small team of 20 people, including developers, artists, and community managers.",
+        "We're a small team of 20 people, including developers, artists, and community managers. You can find more about us on our website.",
 
     ("apply", "application", "job", "recruit", "join", "hire"): 
         "Please use the button above to start the application process.",
 
     ("references", "links", "source", "materials"): 
-        "Click on the link in the task description to see the references.",
+        "Click on the link in the task description to see the references for it.",
 
     ("game direction", "game's direction", "gameplay", "mechanics", "features"): 
         "Please refer to the website — we explain everything there: https://pirpg.netlify.app",
