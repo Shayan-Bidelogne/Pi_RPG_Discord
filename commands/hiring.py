@@ -12,7 +12,8 @@ class Recruitment(commands.Cog):
         self.role_channel_map = {
             "pixelart": 1355852568806293637,
             "dev": 1363812990566006865,
-            "marketing": 31401139679423631430
+            "marketing": 31401139679423631430,
+            "animation": 1401647416993906699
         }
         self.user_roles = {}  # UserID -> role
         self.role_doc_links = {
