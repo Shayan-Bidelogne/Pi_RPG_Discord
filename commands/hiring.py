@@ -120,7 +120,8 @@ class RoleChoiceView(discord.ui.View):
         options=[
             discord.SelectOption(label="Pixel Art", value="pixelart"),
             discord.SelectOption(label="Développement", value="dev"),
-            discord.SelectOption(label="Marketing", value="marketing")
+            discord.SelectOption(label="Marketing", value="marketing"),
+            discord.SelectOption(label="Animation", value="animation")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
