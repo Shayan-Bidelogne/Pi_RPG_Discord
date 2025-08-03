@@ -95,7 +95,8 @@ async def on_ready():
         synced = await bot.tree.sync()
         print(f"🔄 {len(synced)} commandes slash synchronisées.")
 
-        await schedule_validated_tweets()
+        await bot.load_extension("commands.ticket_listener")
+        print("✅ TicketListener chargé.")
 
     except Exception as e:
         print(f"⚠️ Erreur lors de l'initialisation : {e}")
