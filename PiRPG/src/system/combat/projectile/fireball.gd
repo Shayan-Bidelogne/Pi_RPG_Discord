@@ -9,7 +9,7 @@ var direction := Vector2.ZERO
 
 func _ready() -> void:
 	# Delete the fire ball when lasting too long.
-	get_tree().create_timer(lifetime).timeout.connect(queue_free())
+	get_tree().create_timer(lifetime).timeout.connect(queue_free)
 
 
 func _process(delta: float) -> void:
