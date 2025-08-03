@@ -8,6 +8,8 @@ TICKET_CATEGORY_NAME = "Tickets"
 TRIGGERS = {
     "hello": "Hi there! 👋",
     "help": "How can I assist you today?",
+    "size": "A tile is 16px, a human 16px, a tree 32px",
+    "where send": "Hi there! 👋",
     "apply": "Please use the button above to start the application process.",
 }
 
