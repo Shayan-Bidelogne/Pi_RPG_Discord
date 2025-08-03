@@ -6,5 +6,6 @@ TASKS_CHANNEL_ID = {
     'pixel_art': 1355852568806293637,
     'marketing': 1401139679423631430,
     'programmation': 1363812990566006865,
+    'animation': 1401647416993906699,
 }
 CARDS = ["None", "Village", "Forest", "Crystal Forest"]
