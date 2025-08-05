@@ -4,15 +4,20 @@ from discord.ext import commands
 from typing import Optional
 import os
 import asyncpraw
-import config
+
+# Récupérer les variables d'environnement directement ici
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
+REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
+REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
 
 # Initialise Reddit avec asyncpraw
 reddit = asyncpraw.Reddit(
-    client_id=config.REDDIT_CLIENT_ID,
-    client_secret=config.REDDIT_CLIENT_SECRET,
-    username=config.REDDIT_USERNAME,
-    password=config.REDDIT_PASSWORD,
-    user_agent="discord:mybot:v1.0 (by u/{})".format(config.REDDIT_USERNAME),
+    client_id=REDDIT_CLIENT_ID,
+    client_secret=REDDIT_CLIENT_SECRET,
+    username=REDDIT_USERNAME,
+    password=REDDIT_PASSWORD,
+    user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
 
 # Slash command /reddit
