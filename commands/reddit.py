@@ -56,6 +56,9 @@ async def reddit_command(
             await interaction.followup.send("❌ Tu dois fournir soit une image, soit un message.", ephemeral=True)
             return
 
+        # Charger la soumission pour accéder à permalink et autres attributs
+        await submission.load()
+
         await interaction.followup.send(f"✅ Post publié avec succès : https://reddit.com{submission.permalink}")
 
     except Exception as e:
