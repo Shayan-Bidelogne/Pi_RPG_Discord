@@ -67,3 +67,4 @@ async def reddit_command(
 # Setup obligatoire
 async def setup(bot: commands.Bot):
     bot.tree.add_command(reddit_command)
+

@@ -5,6 +5,7 @@ import os
 import io
 import json
 import base64
+from PIL import Image
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -32,23 +33,62 @@ def get_drive_service():
 
 drive_service = get_drive_service()
 
+def gif_to_spritesheet(gif_bytes: bytes) -> io.BytesIO:
+    """Convertit un GIF en spritesheet PNG sans perte"""
+    img = Image.open(io.BytesIO(gif_bytes))
+    
+    frames = []
+    try:
+        while True:
+            frame = img.convert("RGBA")
+            frames.append(frame.copy())
+            img.seek(img.tell() + 1)
+    except EOFError:
+        pass
+
+    # Dimensions de la spritesheet (1 ligne avec toutes les frames)
+    width = sum(f.width for f in frames)
+    height = max(f.height for f in frames)
+
+    spritesheet = Image.new("RGBA", (width, height))
+    x_offset = 0
+    for frame in frames:
+        spritesheet.paste(frame, (x_offset, 0))
+        x_offset += frame.width
+
+    output_bytes = io.BytesIO()
+    spritesheet.save(output_bytes, format="PNG")  # PNG = aucune perte
+    output_bytes.seek(0)
+    return output_bytes
+
 @discord.app_commands.command(name="drive", description="Upload a file to Google Drive")
-@app_commands.describe(file="The file you want to upload (.png only)")
+@app_commands.describe(file="The file you want to upload (.png or .gif)")
 async def drive(interaction: discord.Interaction, file: discord.Attachment):
     await interaction.response.defer(ephemeral=True)
 
-    if not file.filename.lower().endswith(".png"):
-        await interaction.followup.send("❌ Only `.png` files are allowed.", ephemeral=True)
+    ext = file.filename.lower().split(".")[-1]
+    if ext not in ["png", "gif"]:
+        await interaction.followup.send("❌ Only `.png` or `.gif` files are allowed.", ephemeral=True)
         return
 
     file_bytes = await file.read()
-    file_stream = io.BytesIO(file_bytes)
-    media = MediaIoBaseUpload(file_stream, mimetype=file.content_type, resumable=True)
+
+    # Si c’est un GIF → conversion en spritesheet PNG
+    if ext == "gif":
+        file_stream = gif_to_spritesheet(file_bytes)
+        upload_filename = file.filename.rsplit(".", 1)[0] + "_spritesheet.png"
+        mime_type = "image/png"
+    else:
+        file_stream = io.BytesIO(file_bytes)
+        upload_filename = file.filename
+        mime_type = file.content_type
+
+    media = MediaIoBaseUpload(file_stream, mimetype=mime_type, resumable=True)
 
     try:
         uploaded_file = drive_service.files().create(
             body={
-                "name": file.filename,
+                "name": upload_filename,
                 "parents": [TARGET_FOLDER_ID]
             },
             media_body=media,
@@ -58,7 +98,7 @@ async def drive(interaction: discord.Interaction, file: discord.Attachment):
         await interaction.channel.send(
             f"🎉 **File uploaded!**\n"
             f"👤 User: {interaction.user.mention}\n"
-            f"📁 File name: **{file.filename}**\n"
+            f"📁 File name: **{upload_filename}**\n"
             f"🔗 Link: {uploaded_file['webViewLink']}"
         )
     except Exception as e:
