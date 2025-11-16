@@ -10,7 +10,7 @@ TWITTER_ACCESS_TOKEN = os.environ.get("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_TOKEN_SECRET = os.environ.get("TWITTER_ACCESS_TOKEN_SECRET")
 TWITTER_USERNAME = "pi.rpg"
 DISCORD_CHANNEL_ID = int(os.environ.get("DISCORD_CHANNEL_ID", "1439549538556973106"))  # converti en int
-CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))  
+CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "1"))  
 # ==================================================================
 
 class TwitterFeedListener(commands.Cog):
