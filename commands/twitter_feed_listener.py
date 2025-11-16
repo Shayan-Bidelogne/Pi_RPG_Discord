@@ -30,7 +30,7 @@ class TwitterFeedListener(commands.Cog):
             user_id = user.data.id
 
             # Récupère les 5 derniers tweets
-            tweets = self.client.get_users_tweets(id=user_id, max_results=1, tweet_fields=["created_at", "entities"])
+            tweets = self.client.get_users_tweets(id=user_id, max_results=5, tweet_fields=["created_at", "entities"])
             if not tweets.data:
                 return
 
