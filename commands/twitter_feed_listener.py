@@ -56,7 +56,7 @@ class TwitterFeedListener(commands.Cog):
             # Récupère le dernier tweet original avec médias
             tweets = self.client.get_users_tweets(
                 id=self.user_id,
-                max_results=1,
+                max_results=5,
                 tweet_fields=["created_at", "entities", "attachments"],
                 expansions=["attachments.media_keys"],
                 media_fields=["url", "preview_image_url", "type"],
