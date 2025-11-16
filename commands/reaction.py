@@ -1,17 +1,17 @@
 import discord
 from discord.ext import commands
 
-TICKET_CATEGORY_NAME = "Tickets"
+TICKET_CATEGORY_NAME = "Public"
 
 # Liste des rôles qui déclenchent la réaction
 ROLE_NAMES_FOR_REACTION = [
-    "Pixel Artist",
+    "Game Creator",
     "Developer",
     "Marketing"
 ]
 
 # Emoji personnalisé
-EMOJI_REACTION = "<:Pi2:123456789012345678>"   # ← Mets l'ID de ton emoji ici
+EMOJI_REACTION = "<:Pi2:1439545492131418133>"   # ← Mets l'ID de ton emoji ici
 
 
 class RoleReactionListener(commands.Cog):
