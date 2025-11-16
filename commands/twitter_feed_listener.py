@@ -7,7 +7,7 @@ import tweepy
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 DISCORD_CHANNEL_ID = int(os.environ.get("DISCORD_CHANNEL_ID", "1439549538556973106"))
-CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "1"))
+CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))
 # ==================================================================
 
 class TwitterFeedListener(commands.Cog):
@@ -30,7 +30,7 @@ class TwitterFeedListener(commands.Cog):
             user_id = user.data.id
 
             # Récupère les 5 derniers tweets
-            tweets = self.client.get_users_tweets(id=user_id, max_results=5, tweet_fields=["created_at", "entities"])
+            tweets = self.client.get_users_tweets(id=user_id, max_results=1, tweet_fields=["created_at", "entities"])
             if not tweets.data:
                 return
 
