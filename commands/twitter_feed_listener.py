@@ -2,23 +2,41 @@ import os
 import discord
 from discord.ext import commands, tasks
 import tweepy
+import json
 
 # ================== CONFIG depuis l'environnement ==================
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 DISCORD_CHANNEL_ID = int(os.environ.get("DISCORD_CHANNEL_ID", "1439549538556973106"))
 CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))
+POSTED_TWEETS_FILE = "posted_tweet_ids.json"  # fichier pour stocker les tweets déjà postés
 # ==================================================================
 
 class TwitterFeedListener(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.client = tweepy.Client(bearer_token=BEARER_TOKEN)
-        self.posted_tweet_ids = set()  # Pour éviter les doublons
+        self.posted_tweet_ids = self.load_posted_tweets()
         self.check_tweets.start()
 
     def cog_unload(self):
         self.check_tweets.cancel()
+
+    def load_posted_tweets(self):
+        if os.path.exists(POSTED_TWEETS_FILE):
+            try:
+                with open(POSTED_TWEETS_FILE, "r") as f:
+                    return set(json.load(f))
+            except Exception as e:
+                print(f"[TwitterFeedListener] Erreur lors du chargement des tweets : {e}")
+        return set()
+
+    def save_posted_tweets(self):
+        try:
+            with open(POSTED_TWEETS_FILE, "w") as f:
+                json.dump(list(self.posted_tweet_ids), f)
+        except Exception as e:
+            print(f"[TwitterFeedListener] Erreur lors de la sauvegarde des tweets : {e}")
 
     @tasks.loop(minutes=CHECK_INTERVAL_MINUTES)
     async def check_tweets(self):
@@ -29,8 +47,13 @@ class TwitterFeedListener(commands.Cog):
                 return
             user_id = user.data.id
 
-            # Récupère les 5 derniers tweets
-            tweets = self.client.get_users_tweets(id=user_id, max_results=5, tweet_fields=["created_at", "entities"])
+            # Récupère les 5 derniers tweets originaux (exclude replies & retweets)
+            tweets = self.client.get_users_tweets(
+                id=user_id,
+                max_results=5,
+                tweet_fields=["created_at", "entities"],
+                exclude=["replies", "retweets"]
+            )
             if not tweets.data:
                 return
 
@@ -57,6 +80,7 @@ class TwitterFeedListener(commands.Cog):
 
                     await channel.send(embed=embed)
                     self.posted_tweet_ids.add(tweet.id)
+                    self.save_posted_tweets()
 
         except Exception as e:
             print(f"[TwitterFeedListener] Erreur lors de la récupération des tweets : {e}")
