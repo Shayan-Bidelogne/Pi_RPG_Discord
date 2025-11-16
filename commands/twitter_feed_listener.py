@@ -5,7 +5,7 @@ import tweepy
 
 # ================== CONFIG depuis l'environnement ==================
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
-TWITTER_USERNAME = "pi.rpg"
+TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 DISCORD_CHANNEL_ID = int(os.environ.get("DISCORD_CHANNEL_ID", "1439549538556973106"))
 CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "1"))
 # ==================================================================
