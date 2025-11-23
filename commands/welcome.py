@@ -20,6 +20,7 @@ class WelcomeDM(commands.Cog):
             color=0xF39C12  # 🟧 ORANGE HEX ✅
         )
 
+        embed.set_thumbnail(url="https://discord.com/channels/1354455462514262157/1354459544818028714/1442060962902442025")  # change si tu veux
         embed.set_footer(text="Pi RPG • Let the adventure begin")
 
         # === ✅ BOUTON CLIQUABLE ===
