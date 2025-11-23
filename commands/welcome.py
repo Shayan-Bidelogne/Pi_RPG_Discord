@@ -14,13 +14,13 @@ class WelcomeDM(commands.Cog):
         embed = discord.Embed(
             title="🎉 Welcome to Pi RPG!",
             description=(
-                "Its the beginning of your journey in the fabulous Pi RPG's world!\n\n"
+                "It's the beginning of your journey in the fabulous Pi RPG's world!\n\n"
                 "**Create your account to get started** 👇"
             ),
             color=0xF39C12  # 🟧 ORANGE HEX ✅
         )
 
-        embed.set_thumbnail(url="https://discord.com/channels/1354455462514262157/1354459544818028714/1442060962902442025")  # change si tu veux
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1354459544818028714/1442060962671624272/LogoPi2.png?ex=69240f6d&is=6922bded&hm=94af871f102e5e1ac73d82e342e2a14805276c149c5b19f398860d38e2cbcf95")  # change si tu veux
         embed.set_footer(text="Pi RPG • Let the adventure begin")
 
         # === ✅ BOUTON CLIQUABLE ===
