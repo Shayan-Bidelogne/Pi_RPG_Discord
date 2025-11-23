@@ -3,8 +3,9 @@ from discord.ext import commands
 
 WELCOME_ROLE_NAME = "5"  # Le nom exact du rôle que tu veux attribuer
 WELCOME_MESSAGE = """
-Bonjour {user} ! 🎉
-Bienvenue sur le serveur ! Nous sommes ravis de t'avoir parmi nous.
+Welcome {user} ! 🎉
+Its the begining of your journey in the fabulous Pi RPG's world!
+You can create your account here: https://pirpg.netlify.app/pi_rpg_bourse/login
 """
 
 class WelcomeDM(commands.Cog):
