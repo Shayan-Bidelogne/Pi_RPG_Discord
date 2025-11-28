@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bda3awh1mjui0"
-path="res://.godot/imported/ACgarRight3.png-b4f4ab8c019d2c13a419aabbcb398f03.ctex"
+uid="uid://6dm51t2c0hnh"
+path="res://.godot/imported/UI_Loading_Bar.png-5c28b1838ad67d33a11b8ee1d084d839.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/player/ACgarRight3.png"
-dest_files=["res://.godot/imported/ACgarRight3.png-b4f4ab8c019d2c13a419aabbcb398f03.ctex"]
+source_file="res://assets/UI/UI_Loading_Bar.png"
+dest_files=["res://.godot/imported/UI_Loading_Bar.png-5c28b1838ad67d33a11b8ee1d084d839.ctex"]
 
 [params]
 

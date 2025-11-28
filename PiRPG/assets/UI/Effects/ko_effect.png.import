@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c5ckpy462lkg6"
-path="res://.godot/imported/ACharDown2.png-bec3fbe58eb58b426e2f54b0e9941e97.ctex"
+uid="uid://bisi2dgsgf7lt"
+path="res://.godot/imported/ko_effect.png-cb50a8cfd0d8fe27d7c202e08c8aac45.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/player/ACharDown2.png"
-dest_files=["res://.godot/imported/ACharDown2.png-bec3fbe58eb58b426e2f54b0e9941e97.ctex"]
+source_file="res://assets/UI/Effects/ko_effect.png"
+dest_files=["res://.godot/imported/ko_effect.png-cb50a8cfd0d8fe27d7c202e08c8aac45.ctex"]
 
 [params]
 

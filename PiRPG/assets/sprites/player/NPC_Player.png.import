@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dnbbrhq54npti"
-path="res://.godot/imported/ACharDown4.png-346e06f4b85092e961348d87fe2a23bf.ctex"
+uid="uid://doccy26qfqi12"
+path="res://.godot/imported/NPC_Player.png-c6f1e38d4dc79c0f42e279ec26ec916b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/player/ACharDown4.png"
-dest_files=["res://.godot/imported/ACharDown4.png-346e06f4b85092e961348d87fe2a23bf.ctex"]
+source_file="res://assets/sprites/player/NPC_Player.png"
+dest_files=["res://.godot/imported/NPC_Player.png-c6f1e38d4dc79c0f42e279ec26ec916b.ctex"]
 
 [params]
 

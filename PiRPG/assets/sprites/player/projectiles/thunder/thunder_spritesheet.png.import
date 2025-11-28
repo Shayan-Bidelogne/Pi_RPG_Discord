@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b4apl3aydiptx"
-path="res://.godot/imported/ACharDown1.png-24af37fa711e02fee6a1e739ba5fcab2.ctex"
+uid="uid://cl6rp6aaxjj3m"
+path="res://.godot/imported/thunder_spritesheet.png-e924bf1ad46aa8b0664bccdb3ac8ec68.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/player/ACharDown1.png"
-dest_files=["res://.godot/imported/ACharDown1.png-24af37fa711e02fee6a1e739ba5fcab2.ctex"]
+source_file="res://assets/sprites/player/projectiles/thunder/thunder_spritesheet.png"
+dest_files=["res://.godot/imported/thunder_spritesheet.png-e924bf1ad46aa8b0664bccdb3ac8ec68.ctex"]
 
 [params]
 

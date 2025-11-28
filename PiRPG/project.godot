@@ -13,7 +13,6 @@ config_version=5
 config/name="Pi RPG"
 run/main_scene="res://src/maps/overworld.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
-config/icon="uid://dte8ef8hgdatl"
 
 [autoload]
 
