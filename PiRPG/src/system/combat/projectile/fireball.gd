@@ -1,7 +1,7 @@
 extends Area2D
 
 # General variables
-@export var projectile_speed: int = 240
+@export var projectile_speed: int = 80
 @export var lifetime: float = 1.5
 
 var direction := Vector2.ZERO

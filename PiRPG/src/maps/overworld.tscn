@@ -1,11 +1,13 @@
-[gd_scene load_steps=9 format=4 uid="uid://d2ladwemgvwhy"]
+[gd_scene load_steps=11 format=4 uid="uid://d2ladwemgvwhy"]
 
 [ext_resource type="Script" uid="uid://i1xsmj3dw42s" path="res://src/maps/map.gd" id="1_3pkei"]
 [ext_resource type="Texture2D" uid="uid://dof7qmco2n6j6" path="res://assets/sprites/environment/tilesets/tileset_kscav.png" id="3_hfqwy"]
 [ext_resource type="PackedScene" uid="uid://bxbbu2a4pgk10" path="res://src/player/player.tscn" id="4_lqb4u"]
 [ext_resource type="PackedScene" uid="uid://bgqb3yiarx0wk" path="res://src/system/ui/hud.tscn" id="5_3pkei"]
 [ext_resource type="Script" uid="uid://bva6fcv3l2j8r" path="res://src/system/camera/camera.gd" id="5_q76ag"]
-[ext_resource type="PackedScene" uid="uid://bee61jec5doox" path="res://src/mobs/mob.tscn" id="6_s5mk2"]
+[ext_resource type="PackedScene" uid="uid://bee61jec5doox" path="res://src/mobs/Aligator.tscn" id="6_s5mk2"]
+[ext_resource type="PackedScene" uid="uid://dqkkmrcxp6ht7" path="res://src/mobs/snail.tscn" id="7_hfqwy"]
+[ext_resource type="PackedScene" uid="uid://8a2r7npu40ps" path="res://src/mobs/harpy.tscn" id="8_lqb4u"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_lx7qf"]
 texture = ExtResource("3_hfqwy")
@@ -741,7 +743,7 @@ tile_set = SubResource("TileSet_ksrkb")
 
 [node name="Player" parent="." instance=ExtResource("4_lqb4u")]
 z_index = 1
-position = Vector2(192, 96)
+position = Vector2(200, 96)
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
 zoom = Vector2(2, 2)
@@ -749,5 +751,14 @@ script = ExtResource("5_q76ag")
 
 [node name="HUD" parent="." instance=ExtResource("5_3pkei")]
 
-[node name="Mob" parent="." instance=ExtResource("6_s5mk2")]
-position = Vector2(128, 48)
+[node name="Aligator" parent="." instance=ExtResource("6_s5mk2")]
+position = Vector2(350, 210)
+
+[node name="Aligator2" parent="." instance=ExtResource("6_s5mk2")]
+position = Vector2(420, 180)
+
+[node name="Snail" parent="." instance=ExtResource("7_hfqwy")]
+position = Vector2(257, 226)
+
+[node name="CharacterBody2D" parent="." instance=ExtResource("8_lqb4u")]
+position = Vector2(147, 105)
