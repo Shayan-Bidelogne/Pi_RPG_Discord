@@ -330,12 +330,13 @@ class RedditPoster(commands.Cog):
                     g["attachment_url"] = data["attachment_url"]
                 g["messages"].append(data["message"])
 
-        # finalize entries: join texts into a single content string
+        # finalize entries: join texts into a single content string and keep original key
         entries = []
         for k in order[:25]:
             g = grouped[k]
             full_text = " ".join(t.strip() for t in g.get("texts", []) if t and t.strip())[:4000]
             entries.append({
+                "key": k,
                 "text": full_text,
                 "image_url": g.get("image_url"),
                 "attachment_url": g.get("attachment_url"),
@@ -344,6 +345,9 @@ class RedditPoster(commands.Cog):
                 "messages": g.get("messages"),
                 "tweet_id": g.get("tweet_id"),
             })
+
+        # map for stable lookup from select value -> entry
+        entry_map = {e["key"]: e for e in entries}
 
         def make_label(entry, idx):
             preview = (entry["text"] or "").replace("\n", " ").strip()
@@ -360,29 +364,20 @@ class RedditPoster(commands.Cog):
             label = f"#{idx+1} — {preview}"
             return label[:100]
 
-        # UI components
-        class TitleModal(ui.Modal):
-            def __init__(self, entry, idx):
-                super().__init__(title="Enter Reddit post title")
-                self.entry = entry
-                self.idx = idx
-                self.title_input = ui.TextInput(label="Title (max 300 chars)", style=discord.TextStyle.short, max_length=300)
-                self.add_item(self.title_input)
-
-            async def on_submit(self, modal_inter: discord.Interaction):
-                title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
-                await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.entry, self.idx, title), ephemeral=True)
-
+        # UI components (Select uses stable key as value)
         class PreviewView(ui.View):
-            def __init__(self, entry, idx):
+            def __init__(self, entry_key, idx):
                 super().__init__(timeout=120)
-                self.entry = entry
+                self.entry_key = entry_key
                 self.idx = idx
 
             @ui.button(label="Post", style=discord.ButtonStyle.success)
             async def post(self, interaction_p: discord.Interaction, button: ui.Button):
-                # Open the title modal after user confirmed preview
-                await interaction_p.response.send_modal(TitleModal(self.entry, self.idx))
+                entry = entry_map.get(self.entry_key)
+                if not entry:
+                    await interaction_p.response.send_message("Entry lost — try again.", ephemeral=True)
+                    return
+                await interaction_p.response.send_modal(TitleModal(entry, self.idx))
 
             @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
             async def cancel(self, interaction_p: discord.Interaction, button: ui.Button):
@@ -391,7 +386,7 @@ class RedditPoster(commands.Cog):
         class TweetSelect(ui.Select):
             def __init__(self, entries):
                 options = [
-                    discord.SelectOption(label=make_label(entry, i), value=str(i))
+                    discord.SelectOption(label=make_label(entry, i), value=entry["key"])
                     for i, entry in enumerate(entries)
                 ]
                 super().__init__(placeholder="Choose a tweet...", options=options, min_values=1, max_values=1)
@@ -399,39 +394,47 @@ class RedditPoster(commands.Cog):
 
             async def callback(self, interaction2: discord.Interaction):
                 try:
-                    idx = int(self.values[0])
-                    entry = self.entries[idx]
+                    key = self.values[0]
+                    entry = entry_map.get(key)
+                    if not entry:
+                        await interaction2.response.send_message("Selected entry not found — please retry.", ephemeral=True)
+                        return
 
-                    # build preview embed
-                    embed = discord.Embed(title=self.clean_label(entry.get("text")[:100]) if entry.get("text") else f"Entry #{idx+1}", color=discord.Color.blurple())
+                    # build preview embed (include debug metadata)
+                    preview_title = self.entries[[e["key"] for e in self.entries].index(key)]["text"] if any(e["key"]==key for e in self.entries) else f"Entry"
+                    embed = discord.Embed(title=self.clean_label(entry.get("text")[:100]) if entry.get("text") else f"Entry", color=discord.Color.blurple())
                     text = (entry.get("text") or "").strip()
                     if text:
-                        # truncate to 1024 for embed field
                         embed.add_field(name="Content", value=text[:1024], inline=False)
 
-                    # show image preview if exists
+                    # debug fields to help trace mismatches
+                    meta = []
+                    if entry.get("tweet_id"):
+                        meta.append(f"tweet_id: {entry.get('tweet_id')}")
+                    if entry.get("filename"):
+                        meta.append(f"filename: {entry.get('filename')}")
+                    if meta:
+                        embed.add_field(name="Meta", value=" • ".join(meta), inline=False)
+
                     if entry.get("image_url"):
                         embed.set_image(url=entry.get("image_url"))
-                    # if video, display filename if available (from attachment) so user sees it's a video
                     elif entry.get("media_type") == "video" and entry.get("attachment_url"):
-                        # extract filename if present in URL
                         try:
-                            filename = entry.get("attachment_url").split("/")[-1]
+                            filename = entry.get("filename") or entry.get("attachment_url").split("/")[-1]
                         except Exception:
                             filename = entry.get("attachment_url")
                         embed.add_field(name="Video", value=f"{filename}", inline=False)
                     elif entry.get("attachment_url"):
                         embed.add_field(name="Attachment", value=entry.get("attachment_url"), inline=False)
 
-                    embed.set_footer(text=f"Selected: #{idx+1}")
+                    embed.set_footer(text=f"Selected: {key}")
 
-                    await interaction2.response.send_message("Preview:", embed=embed, view=PreviewView(entry, idx), ephemeral=True)
+                    await interaction2.response.send_message("Preview:", embed=embed, view=PreviewView(key, [i for i,e in enumerate(self.entries) if e["key"]==key][0]), ephemeral=True)
                 except Exception as e:
-                    # fallback: show modal directly if preview failed
                     try:
-                        await interaction2.response.send_modal(TitleModal(self.entries[0], 0))
-                    except Exception:
                         await interaction2.response.send_message(f"Error preparing preview: {e}", ephemeral=True)
+                    except Exception:
+                        pass
 
         class TweetView(ui.View):
             def __init__(self, entries):
