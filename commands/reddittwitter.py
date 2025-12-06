@@ -331,6 +331,21 @@ class RedditPoster(commands.Cog):
                 title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
                 await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.entry, self.idx, title), ephemeral=True)
 
+        class PreviewView(ui.View):
+            def __init__(self, entry, idx):
+                super().__init__(timeout=120)
+                self.entry = entry
+                self.idx = idx
+
+            @ui.button(label="Post", style=discord.ButtonStyle.success)
+            async def post(self, interaction_p: discord.Interaction, button: ui.Button):
+                # Open the title modal after user confirmed preview
+                await interaction_p.response.send_modal(TitleModal(self.entry, self.idx))
+
+            @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+            async def cancel(self, interaction_p: discord.Interaction, button: ui.Button):
+                await interaction_p.response.send_message("Cancelled preview.", ephemeral=True)
+
         class TweetSelect(ui.Select):
             def __init__(self, entries):
                 options = [
@@ -341,9 +356,40 @@ class RedditPoster(commands.Cog):
                 self.entries = entries
 
             async def callback(self, interaction2: discord.Interaction):
-                idx = int(self.values[0])
-                entry = self.entries[idx]
-                await interaction2.response.send_modal(TitleModal(entry, idx))
+                try:
+                    idx = int(self.values[0])
+                    entry = self.entries[idx]
+
+                    # build preview embed
+                    embed = discord.Embed(title=self.clean_label(entry.get("text")[:100]) if entry.get("text") else f"Entry #{idx+1}", color=discord.Color.blurple())
+                    text = (entry.get("text") or "").strip()
+                    if text:
+                        # truncate to 1024 for embed field
+                        embed.add_field(name="Content", value=text[:1024], inline=False)
+
+                    # show image preview if exists
+                    if entry.get("image_url"):
+                        embed.set_image(url=entry.get("image_url"))
+                    # if video, display filename if available (from attachment) so user sees it's a video
+                    elif entry.get("media_type") == "video" and entry.get("attachment_url"):
+                        # extract filename if present in URL
+                        try:
+                            filename = entry.get("attachment_url").split("/")[-1]
+                        except Exception:
+                            filename = entry.get("attachment_url")
+                        embed.add_field(name="Video", value=f"{filename}", inline=False)
+                    elif entry.get("attachment_url"):
+                        embed.add_field(name="Attachment", value=entry.get("attachment_url"), inline=False)
+
+                    embed.set_footer(text=f"Selected: #{idx+1}")
+
+                    await interaction2.response.send_message("Preview:", embed=embed, view=PreviewView(entry, idx), ephemeral=True)
+                except Exception as e:
+                    # fallback: show modal directly if preview failed
+                    try:
+                        await interaction2.response.send_modal(TitleModal(self.entries[0], 0))
+                    except Exception:
+                        await interaction2.response.send_message(f"Error preparing preview: {e}", ephemeral=True)
 
         class TweetView(ui.View):
             def __init__(self, entries):
