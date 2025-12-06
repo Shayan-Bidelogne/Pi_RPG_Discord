@@ -96,6 +96,18 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
+        # Require role named "1" (mention @1). Adjust name if your role is different.
+        required_role_name = "1"
+        member = interaction.user  # expected to be a discord.Member in guild context
+        roles = getattr(member, "roles", []) or []
+        if not any(r.name == required_role_name for r in roles):
+            try:
+                await interaction.response.send_message(f"❌ Vous devez avoir le rôle @{required_role_name} pour utiliser cette commande.", ephemeral=True)
+            except Exception:
+                # if response already used, try followup
+                await interaction.followup.send(f"❌ Vous devez avoir le rôle @{required_role_name} pour utiliser cette commande.", ephemeral=True)
+            return
+
         await interaction.response.defer(ephemeral=True)
 
         channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)

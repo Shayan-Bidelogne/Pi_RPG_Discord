@@ -43,6 +43,40 @@ class TwitterFeedListener(commands.Cog):
         except Exception as e:
             print(f"[TwitterFeedListener] Error saving posted tweets: {e}")
 
+    async def tweet_in_library(self, tid: str, channel: discord.TextChannel, search_limit: int = 500) -> bool:
+        """
+        Inspect recent messages in the library channel to see if a tweet with id `tid`
+        is already present (embed footer, embed description/content, attachment filename/url, message content).
+        """
+        try:
+            async for msg in channel.history(limit=search_limit):
+                # check embeds (footer or description)
+                for emb in getattr(msg, "embeds", []) or []:
+                    footer = getattr(getattr(emb, "footer", None), "text", None)
+                    if footer and str(tid) in footer:
+                        return True
+                    desc = getattr(emb, "description", None)
+                    if desc and str(tid) in desc:
+                        return True
+                # check message content
+                if msg.content and str(tid) in msg.content:
+                    return True
+                # check attachments (filename or url)
+                for att in getattr(msg, "attachments", []) or []:
+                    fname = getattr(att, "filename", "") or ""
+                    url = getattr(att, "url", "") or ""
+                    proxy = getattr(att, "proxy_url", "") or ""
+                    if fname and str(tid) in fname:
+                        return True
+                    if url and str(tid) in url:
+                        return True
+                    if proxy and str(tid) in proxy:
+                        return True
+        except Exception as e:
+            print(f"[TwitterFeedListener] Error searching library for tweet {tid}: {e}")
+        return False
+
+
     async def fetch_and_post_tweets(self):
         try:
             # ensure user id
@@ -75,7 +109,6 @@ class TwitterFeedListener(commands.Cog):
             # build media dict keyed by media_key
             media_dict = {}
             for m in media_list:
-                # tweepy objects may be dict-like or objects; handle both
                 try:
                     key = m.get("media_key") if isinstance(m, dict) else getattr(m, "media_key", None)
                 except Exception:
@@ -85,7 +118,18 @@ class TwitterFeedListener(commands.Cog):
 
             for tweet in tweets.data:
                 tid = getattr(tweet, "id", None)
-                if not tid or tid in self.posted_tweet_ids:
+                if not tid:
+                    continue
+
+                # skip if already processed
+                if tid in self.posted_tweet_ids:
+                    continue
+
+                # skip if already present in the library channel (embed/footer/content/attachments)
+                already_in_lib = await self.tweet_in_library(tid, channel)
+                if already_in_lib:
+                    print(f"[TwitterFeedListener] Tweet {tid} already in library — skipping.")
+                    self.posted_tweet_ids.add(tid)
                     continue
 
                 embed = discord.Embed(
@@ -115,11 +159,9 @@ class TwitterFeedListener(commands.Cog):
                         image_url = (m.get("url") if isinstance(m, dict) else getattr(m, "url", None)) or (m.get("preview_image_url") if isinstance(m, dict) else getattr(m, "preview_image_url", None))
                         if image_url:
                             embed.set_image(url=image_url)
-                            # for photos we can stop scanning media keys
                             break
 
                     elif m_type in ("video", "animated_gif"):
-                        # pick best mp4 variant if present
                         variants = (m.get("variants") if isinstance(m, dict) else getattr(m, "variants", None)) or []
                         mp4_variants = []
                         for v in variants:
@@ -136,37 +178,31 @@ class TwitterFeedListener(commands.Cog):
                             mp4_variants.sort(reverse=True)
                             video_download_url = mp4_variants[0][1]
                         else:
-                            # no direct mp4 variant — try preview_image_url as thumbnail only
                             image_url = (m.get("preview_image_url") if isinstance(m, dict) else getattr(m, "preview_image_url", None))
                             if image_url:
                                 embed.set_image(url=image_url)
-                        # prefer first video found
                         if video_download_url or image_url:
                             break
 
                     else:
-                        # unknown media: try to use url/preview as image
                         url = (m.get("url") if isinstance(m, dict) else getattr(m, "url", None)) or (m.get("preview_image_url") if isinstance(m, dict) else getattr(m, "preview_image_url", None))
                         if url and not image_url:
                             image_url = url
                             embed.set_image(url=image_url)
 
-                # store tweet id in footer for later grouping
                 embed.set_footer(text=f"Tweet ID: {tid}")
 
-                # Send: if we have a downloadable mp4 variant, download and attach the file in the SAME message.
                 if video_download_url:
                     try:
                         async with aiohttp.ClientSession() as session:
-                            # download video bytes
                             async with session.get(video_download_url, timeout=60) as vresp:
                                 if vresp.status == 200:
                                     vdata = await vresp.read()
                                 else:
                                     await channel.send(embed=embed)
+                                    self.posted_tweet_ids.add(tid)
                                     continue
 
-                            # prepare thumbnail: prefer image_url (preview) if available, else try to extract a still later
                             thumb_path = None
                             if image_url:
                                 try:
@@ -186,7 +222,6 @@ class TwitterFeedListener(commands.Cog):
                                 except Exception:
                                     thumb_path = None
 
-                            # save video to temp file
                             vid_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
                             try:
                                 vid_tmp.write(vdata)
@@ -198,23 +233,20 @@ class TwitterFeedListener(commands.Cog):
                                 except Exception:
                                     pass
                                 await channel.send(embed=embed)
+                                self.posted_tweet_ids.add(tid)
                                 continue
 
-                            # if we have a thumbnail file, reference it in the embed as attachment://<filename>
                             files_to_send = []
                             if thumb_path:
                                 thumb_filename = f"{tid}_thumb.jpg"
                                 files_to_send.append(discord.File(thumb_path, filename=thumb_filename))
                                 embed.set_image(url=f"attachment://{thumb_filename}")
 
-                            # attach video file (name with tweet id to help grouping)
                             video_filename = f"{tid}.mp4"
                             files_to_send.append(discord.File(video_path, filename=video_filename))
 
-                            # send embed + files in one message
                             await channel.send(embed=embed, files=files_to_send)
 
-                            # cleanup temp files
                             try:
                                 if thumb_path and os.path.exists(thumb_path):
                                     os.unlink(thumb_path)
@@ -225,25 +257,11 @@ class TwitterFeedListener(commands.Cog):
                                     os.unlink(video_path)
                             except Exception:
                                 pass
-                               
-                               
-                               
-                               
-                               
-                               
-                               
-                               
-                               
-                               
-                               
-                               
-                               
                         # end session context
                     except Exception as e:
                         print(f"[TwitterFeedListener] Error downloading/video attaching {video_download_url}: {e}")
                         await channel.send(embed=embed)
                 else:
-                    # no downloadable mp4 variant — send embed (image if set) only
                     await channel.send(embed=embed)
 
                 self.posted_tweet_ids.add(tid)
