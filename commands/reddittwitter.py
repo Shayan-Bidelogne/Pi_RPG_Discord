@@ -37,14 +37,17 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
+        # defer immediately to avoid "This interaction failed" on long work
+        await interaction.response.defer(ephemeral=True)
+
         channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
         if not channel:
-            await interaction.response.send_message("❌ Library channel not found.", ephemeral=True)
+            await interaction.followup.send("❌ Library channel not found.", ephemeral=True)
             return
 
         messages = [msg async for msg in channel.history(limit=200)]
         if not messages:
-            await interaction.response.send_message("❌ No tweets in the library.", ephemeral=True)
+            await interaction.followup.send("❌ No tweets in the library.", ephemeral=True)
             return
 
         # helper to extract text/media/tweet_id from a message (supports embed.video, embed.image & attachments)
