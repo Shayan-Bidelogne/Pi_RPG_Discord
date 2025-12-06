@@ -71,21 +71,17 @@ class RedditPoster(commands.Cog):
         class SubredditSelect(ui.View):
             def __init__(self):
                 super().__init__(timeout=120)
-                self.add_item(
-                    ui.Select(
-                        placeholder="Choisis le subreddit...",
-                        options=[
-                            discord.SelectOption(label="r/test", value="test"),
-                            discord.SelectOption(label="r/mySubreddit1", value="mySubreddit1"),
-                            discord.SelectOption(label="r/mySubreddit2", value="mySubreddit2"),
-                        ],
-                        custom_id="subreddit_select"
-                    )
+                select = ui.Select(
+                    placeholder="Choisis le subreddit...",
+                    options=[
+                        discord.SelectOption(label="r/test", value="test"),
+                        discord.SelectOption(label="r/mySubreddit1", value="mySubreddit1"),
+                        discord.SelectOption(label="r/mySubreddit2", value="mySubreddit2"),
+                    ],
+                    custom_id="subreddit_select"
                 )
-                self.add_item_callback(self.children[0])
-
-            def add_item_callback(self, select):
                 select.callback = self.select_callback
+                self.add_item(select)
 
             async def select_callback(self, interaction2: discord.Interaction):
                 values = interaction2.data.get("values", [])
@@ -136,6 +132,9 @@ class RedditPoster(commands.Cog):
                     else:
                         submission = await subreddit_obj.submit(title=tweet.text[:300], selftext=tweet.text)
 
+                    # ⚡ Correction : load pour récupérer le permalink
+                    await submission.load()
+
                     await interaction2.followup.send(
                         f"✅ Post Reddit publié : https://reddit.com{submission.permalink}", ephemeral=True
                     )
@@ -148,6 +147,6 @@ class RedditPoster(commands.Cog):
             f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True
         )
 
-
+# ================== Setup ==================
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))
