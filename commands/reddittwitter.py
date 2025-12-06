@@ -484,45 +484,87 @@ class RedditPoster(commands.Cog):
                     subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
                     submission = None
 
-                    # Prefer discord attachments present in messages; try each message attachment first
+                    # First: try to use discord attachments directly (safer than HTTP CDN fetch)
                     media_path = None
                     media_kind = None
 
-                    # Try attachments in original messages first (more reliable)
                     for msg in self.entry.get("messages", []):
                         for att in getattr(msg, "attachments", []):
-                            url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
                             filename = getattr(att, "filename", "") or ""
-                            if not url and filename:
-                                try:
-                                    ch_id = getattr(msg.channel, "id", None)
-                                    msg_id = getattr(msg, "id", None)
-                                    if ch_id and msg_id:
-                                        url = f"https://cdn.discordapp.com/attachments/{ch_id}/{msg_id}/{filename}"
-                                except Exception:
-                                    pass
-                            if not url:
-                                continue
-                            prepared = await download_and_prepare_media(url, filename_hint=filename)
-                            if prepared[0]:
-                                media_path, media_kind = prepared
-                                break
+                            try:
+                                data = await att.read()
+                            except Exception:
+                                # fallback to URL download if read() fails
+                                data = None
+
+                            if data:
+                                lower_fn = filename.lower()
+                                # video by filename
+                                if any(lower_fn.endswith(ext) for ext in VIDEO_EXTS):
+                                    if lower_fn.endswith(".mp4"):
+                                        media_path = await _save_bytes(data, ".mp4")
+                                        media_kind = "video"
+                                        break
+                                    # transcode non-mp4
+                                    if _ffmpeg_available():
+                                        in_path = await _save_bytes(data, os.path.splitext(filename)[1] or ".tmp")
+                                        out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                                        out_path = out_tmp.name
+                                        out_tmp.close()
+                                        ok = await _transcode_to_mp4(in_path, out_path)
+                                        try:
+                                            os.unlink(in_path)
+                                        except Exception:
+                                            pass
+                                        if ok and os.path.exists(out_path):
+                                            media_path = out_path
+                                            media_kind = "video"
+                                            break
+                                        else:
+                                            try:
+                                                if os.path.exists(out_path):
+                                                    os.unlink(out_path)
+                                            except Exception:
+                                                pass
+                                            continue
+                                    else:
+                                        # cannot transcode -> skip this attachment
+                                        continue
+                                # image by filename
+                                if any(lower_fn.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                                    ext = None
+                                    for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                                        if lower_fn.endswith(e):
+                                            ext = e; break
+                                    if not ext:
+                                        ext = ".jpg"
+                                    media_path = await _save_bytes(data, ext)
+                                    media_kind = "image"
+                                    break
+
+                            # if att.read() failed or data None, try fallback to URL via download_and_prepare_media
+                            url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
+                            if url:
+                                prepared = await download_and_prepare_media(url, filename_hint=filename)
+                                if prepared[0]:
+                                    media_path, media_kind = prepared
+                                    break
                         if media_path:
                             break
 
-                    # If nothing from attachments, try entry attachment_url/image_url
+                    # If still nothing, try entry attachment_url/image_url (embeds)
                     if not media_path:
                         for candidate in (self.entry.get("attachment_url"), self.entry.get("image_url")):
                             if not candidate:
                                 continue
-                            prepared = await download_and_prepare_media(candidate)
+                            prepared = await download_and_prepare_media(candidate, filename_hint=self.entry.get("filename") or "")
                             if prepared[0]:
                                 media_path, media_kind = prepared
                                 break
 
+                    # Upload or text post
                     if media_path:
                         tmp_path = media_path
-                        # post media
                         try:
                             if media_kind == "video":
                                 submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=media_path)
@@ -532,7 +574,6 @@ class RedditPoster(commands.Cog):
                             await interaction4.followup.send(f"❌ Media upload failed — post aborted. ({e})", ephemeral=True)
                             return
                     else:
-                        # no media available, post text if present; else abort
                         text = (self.entry.get("text") or "").strip()
                         if not text:
                             await interaction4.followup.send("❌ No media or text to post — aborted.", ephemeral=True)
@@ -549,6 +590,7 @@ class RedditPoster(commands.Cog):
                         await interaction4.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
                     else:
                         await interaction4.followup.send("❌ Unable to obtain submission object.", ephemeral=True)
+
                 except Exception as e:
                     await interaction4.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
                 finally:
