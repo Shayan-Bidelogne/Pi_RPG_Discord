@@ -240,48 +240,82 @@ class RedditPoster(commands.Cog):
                     subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
                     submission = None
 
-                    # If we have a video URL, download and post it as video
-                    if self.entry["media_type"] == "video" and self.entry["attachment_url"]:
-                        media_url = self.entry["attachment_url"]
+                    # decide media url (prefer attachment_url for videos)
+                    media_url = self.entry.get("attachment_url") or self.entry.get("image_url")
+                    if media_url:
                         async with aiohttp.ClientSession() as session:
                             async with session.get(media_url) as resp:
-                                if resp.status == 200:
-                                    suffix = ".mp4" if media_url.endswith(".mp4") else None
-                                    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-                                    tmp_file.write(await resp.read())
-                                    tmp_file.close()
-                                    try:
-                                        submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=tmp_file.name)
-                                    finally:
-                                        try:
-                                            os.unlink(tmp_file.name)
-                                        except Exception:
-                                            pass
-                                else:
-                                    await interaction4.followup.send("❌ Failed to download media.", ephemeral=True)
+                                if resp.status != 200:
+                                    await interaction4.followup.send("❌ Failed to download media — post aborted.", ephemeral=True)
                                     return
-                    # If image present, submit image
-                    elif self.entry["image_url"]:
-                        media_url = self.entry["image_url"]
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(media_url) as resp:
-                                if resp.status == 200:
-                                    tmp_file = tempfile.NamedTemporaryFile(delete=False)
-                                    tmp_file.write(await resp.read())
-                                    tmp_file.close()
-                                    try:
-                                        submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=tmp_file.name)
-                                    finally:
-                                        try:
-                                            os.unlink(tmp_file.name)
-                                        except Exception:
-                                            pass
-                                else:
-                                    await interaction4.followup.send("❌ Failed to download media.", ephemeral=True)
-                                    return
+                                content_type = (resp.headers.get("Content-Type") or "").lower()
+                                data = await resp.read()
+
+                        # helper to map image content-type to extension
+                        img_ext_map = {
+                            "image/jpeg": ".jpg",
+                            "image/jpg": ".jpg",
+                            "image/png": ".png",
+                            "image/webp": ".webp",
+                            "image/gif": ".gif",
+                        }
+
+                        # If response is a video, attempt upload as video (.mp4)
+                        if content_type.startswith("video") or media_url.endswith(".mp4") or media_url.endswith(".mov") or media_url.endswith(".webm"):
+                            suffix = ".mp4"
+                            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                            tmp_file.write(data)
+                            tmp_file.close()
+                            try:
+                                submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=tmp_file.name)
+                            except Exception as e:
+                                await interaction4.followup.send(f"❌ Video upload failed — post aborted. ({e})", ephemeral=True)
+                                try:
+                                    os.unlink(tmp_file.name)
+                                except Exception:
+                                    pass
+                                return
+                            finally:
+                                try:
+                                    os.unlink(tmp_file.name)
+                                except Exception:
+                                    pass
+
+                        # If response is an image, upload as image
+                        elif content_type.startswith("image") or any(media_url.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                            ext = img_ext_map.get(content_type, None)
+                            if not ext:
+                                for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                                    if media_url.endswith(e):
+                                        ext = e
+                                        break
+                            if not ext:
+                                ext = ".jpg"
+                            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+                            tmp_file.write(data)
+                            tmp_file.close()
+                            try:
+                                submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=tmp_file.name)
+                            except Exception as e:
+                                await interaction4.followup.send(f"❌ Image upload failed — post aborted. ({e})", ephemeral=True)
+                                try:
+                                    os.unlink(tmp_file.name)
+                                except Exception:
+                                    pass
+                                return
+                            finally:
+                                try:
+                                    os.unlink(tmp_file.name)
+                                except Exception:
+                                    pass
+
+                        else:
+                            # Unknown media type: abort without sending external link
+                            await interaction4.followup.send("⚠️ Unknown media type — cannot upload to Reddit. Post aborted.", ephemeral=True)
+                            return
                     else:
                         # text post
-                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.entry["text"] or ""))
+                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.entry.get("text") or ""))
 
                     if submission is not None:
                         try:
