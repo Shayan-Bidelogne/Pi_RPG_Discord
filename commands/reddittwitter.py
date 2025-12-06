@@ -11,7 +11,7 @@ REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
 REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
-DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1401352070505824306"))
+DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1439549538556973106"))
 
 # Subreddits disponibles
 SUBREDDITS = ["test", "mySubreddit1", "mySubreddit2"]
@@ -140,6 +140,7 @@ class RedditPoster(commands.Cog):
                 try:
                     subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
                     # handle media if exists
+                    submission = None
                     if self.msg.attachments:
                         att = self.msg.attachments[0]
                         content_type = getattr(att, "content_type", "") or ""
@@ -165,7 +166,18 @@ class RedditPoster(commands.Cog):
                                     return
                     else:
                         submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.msg.content or ""))
-                    await interaction4.followup.send(f"✅ Reddit post published: https://reddit.com{submission.permalink}", ephemeral=True)
+
+                    # Ensure submission is loaded so permalink is available, then build a safe URL
+                    if submission is not None:
+                        try:
+                            await submission.load()
+                        except Exception:
+                            pass
+                        permalink = getattr(submission, "permalink", None)
+                        post_url = f"https://reddit.com{permalink}" if permalink else f"https://reddit.com/comments/{getattr(submission, 'id', '')}"
+                        await interaction4.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
+                    else:
+                        await interaction4.followup.send("❌ Unable to obtain submission object.", ephemeral=True)
                 except Exception as e:
                     await interaction4.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
 
