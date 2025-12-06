@@ -39,29 +39,42 @@ async def reddit_command(
     try:
         sub = await reddit.subreddit(subreddit, fetch=True)
 
+        # ==========================
+        #   CAS : Media (image/video)
+        # ==========================
         if media:
             file_path = f"/tmp/{interaction.id}_{media.filename}"
             await media.save(file_path)
 
+            # ----- VIDEO -----
             if media.content_type.startswith("video"):
-                # --- UPLOAD VIDÉO ---
+                # 1) Upload vidéo
                 submission = await sub.submit_video(
                     title=title,
-                    video_path=file_path,
-                    selftext=message or ""
+                    video_path=file_path
                 )
 
+                # 2) Ajouter texte APRÈS coup
+                if message:
+                    await submission.edit(message)
+
+            # ----- IMAGE -----
             else:
-                # --- UPLOAD IMAGE ---
                 submission = await sub.submit_image(
                     title=title,
                     image_path=file_path
                 )
 
+                # Ajouter texte après coup si image + texte (facultatif)
+                if message:
+                    await submission.edit(message)
+
             os.remove(file_path)
 
+        # ==========================
+        #   CAS : Texte seul
+        # ==========================
         elif message:
-            # --- TEXTE SEUL ---
             submission = await sub.submit(
                 title=title,
                 selftext=message
