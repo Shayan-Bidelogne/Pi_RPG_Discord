@@ -349,10 +349,13 @@ class RedditPoster(commands.Cog):
         # map for stable lookup from select value -> entry
         entry_map = {e["key"]: e for e in entries}
 
+        # capture cog instance for use inside nested UI classes (avoid self ambiguity)
+        cog = self
+
         def make_label(entry, idx):
             preview = (entry["text"] or "").replace("\n", " ").strip()
             if preview:
-                preview = self.clean_label(preview)
+                preview = cog.clean_label(preview)
             elif entry["media_type"] == "video":
                 preview = "Video"
             elif entry["image_url"]:
@@ -401,8 +404,7 @@ class RedditPoster(commands.Cog):
                         return
 
                     # build preview embed (include debug metadata)
-                    preview_title = self.entries[[e["key"] for e in self.entries].index(key)]["text"] if any(e["key"]==key for e in self.entries) else f"Entry"
-                    embed = discord.Embed(title=self.clean_label(entry.get("text")[:100]) if entry.get("text") else f"Entry", color=discord.Color.blurple())
+                    embed = discord.Embed(title=cog.clean_label(entry.get("text")[:100]) if entry.get("text") else f"Entry", color=discord.Color.blurple())
                     text = (entry.get("text") or "").strip()
                     if text:
                         embed.add_field(name="Content", value=text[:1024], inline=False)
@@ -440,173 +442,6 @@ class RedditPoster(commands.Cog):
             def __init__(self, entries):
                 super().__init__(timeout=120)
                 self.add_item(TweetSelect(entries))
-
-        class SubredditSelect(ui.Select):
-            def __init__(self, entry, idx, title):
-                options = [discord.SelectOption(label=sub, value=sub) for sub in SUBREDDITS[:25]]
-                super().__init__(placeholder="Choose a subreddit...", options=options, min_values=1, max_values=1)
-                self.entry = entry
-                self.idx = idx
-                self.title = title
-
-            async def callback(self, interaction3: discord.Interaction):
-                subreddit_name = self.values[0]
-                entry = self.entry
-
-                embed = discord.Embed(title=self.title[:300], color=discord.Color.blurple())
-                if entry["text"]:
-                    embed.add_field(name="Content", value=entry["text"][:1024], inline=False)
-                if entry["media_type"] == "video" and entry["attachment_url"]:
-                    embed.add_field(name="Video", value="(video will be uploaded from the library)", inline=False)
-                elif entry["image_url"]:
-                    embed.set_image(url=entry["image_url"])
-                elif entry["attachment_url"]:
-                    embed.add_field(name="Attachment", value=entry["attachment_url"], inline=False)
-                embed.set_footer(text=f"Subreddit: r/{subreddit_name}")
-
-                await interaction3.response.send_message("Preview — confirm before posting:", embed=embed, view=ConfirmView(entry, self.idx, self.title, subreddit_name), ephemeral=True)
-
-        class SubredditView(ui.View):
-            def __init__(self, entry, idx, title):
-                super().__init__(timeout=120)
-                self.add_item(SubredditSelect(entry, idx, title))
-
-        class ConfirmView(ui.View):
-            def __init__(self, entry, idx, title, subreddit_name):
-                super().__init__(timeout=120)
-                self.entry = entry
-                self.idx = idx
-                self.title = title
-                self.subreddit_name = subreddit_name
-
-            @ui.button(label="Confirm", style=discord.ButtonStyle.success)
-            async def confirm(self, interaction4: discord.Interaction, button: ui.Button):
-                await interaction4.response.defer(ephemeral=True)
-                tmp_path = None
-                try:
-                    subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
-                    submission = None
-
-                    # First: try to use discord attachments directly (safer than HTTP CDN fetch)
-                    media_path = None
-                    media_kind = None
-
-                    for msg in self.entry.get("messages", []):
-                        for att in getattr(msg, "attachments", []):
-                            filename = getattr(att, "filename", "") or ""
-                            try:
-                                data = await att.read()
-                            except Exception:
-                                # fallback to URL download if read() fails
-                                data = None
-
-                            if data:
-                                lower_fn = filename.lower()
-                                # video by filename
-                                if any(lower_fn.endswith(ext) for ext in VIDEO_EXTS):
-                                    if lower_fn.endswith(".mp4"):
-                                        media_path = await _save_bytes(data, ".mp4")
-                                        media_kind = "video"
-                                        break
-                                    # transcode non-mp4
-                                    if _ffmpeg_available():
-                                        in_path = await _save_bytes(data, os.path.splitext(filename)[1] or ".tmp")
-                                        out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                                        out_path = out_tmp.name
-                                        out_tmp.close()
-                                        ok = await _transcode_to_mp4(in_path, out_path)
-                                        try:
-                                            os.unlink(in_path)
-                                        except Exception:
-                                            pass
-                                        if ok and os.path.exists(out_path):
-                                            media_path = out_path
-                                            media_kind = "video"
-                                            break
-                                        else:
-                                            try:
-                                                if os.path.exists(out_path):
-                                                    os.unlink(out_path)
-                                            except Exception:
-                                                pass
-                                            continue
-                                    else:
-                                        # cannot transcode -> skip this attachment
-                                        continue
-                                # image by filename
-                                if any(lower_fn.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
-                                    ext = None
-                                    for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                                        if lower_fn.endswith(e):
-                                            ext = e; break
-                                    if not ext:
-                                        ext = ".jpg"
-                                    media_path = await _save_bytes(data, ext)
-                                    media_kind = "image"
-                                    break
-
-                            # if att.read() failed or data None, try fallback to URL via download_and_prepare_media
-                            url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
-                            if url:
-                                prepared = await download_and_prepare_media(url, filename_hint=filename)
-                                if prepared[0]:
-                                    media_path, media_kind = prepared
-                                    break
-                        if media_path:
-                            break
-
-                    # If still nothing, try entry attachment_url/image_url (embeds)
-                    if not media_path:
-                        for candidate in (self.entry.get("attachment_url"), self.entry.get("image_url")):
-                            if not candidate:
-                                continue
-                            prepared = await download_and_prepare_media(candidate, filename_hint=self.entry.get("filename") or "")
-                            if prepared[0]:
-                                media_path, media_kind = prepared
-                                break
-
-                    # Upload or text post
-                    if media_path:
-                        tmp_path = media_path
-                        try:
-                            if media_kind == "video":
-                                submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=media_path)
-                            else:
-                                submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=media_path)
-                        except Exception as e:
-                            await interaction4.followup.send(f"❌ Media upload failed — post aborted. ({e})", ephemeral=True)
-                            return
-                    else:
-                        text = (self.entry.get("text") or "").strip()
-                        if not text:
-                            await interaction4.followup.send("❌ No media or text to post — aborted.", ephemeral=True)
-                            return
-                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=text)
-
-                    if submission:
-                        try:
-                            await submission.load()
-                        except Exception:
-                            pass
-                        permalink = getattr(submission, "permalink", None)
-                        post_url = f"https://reddit.com{permalink}" if permalink else f"https://reddit.com/comments/{getattr(submission, 'id', '')}"
-                        await interaction4.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
-                    else:
-                        await interaction4.followup.send("❌ Unable to obtain submission object.", ephemeral=True)
-
-                except Exception as e:
-                    await interaction4.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
-                finally:
-                    if tmp_path:
-                        try:
-                            if os.path.exists(tmp_path):
-                                os.unlink(tmp_path)
-                        except Exception:
-                            pass
-
-            @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-            async def cancel(self, interaction4: discord.Interaction, button: ui.Button):
-                await interaction4.response.send_message("Cancelled.", ephemeral=True)
 
         # send selection view
         await interaction.followup.send("📚 Select a tweet from the library:", view=TweetView(entries), ephemeral=True)
