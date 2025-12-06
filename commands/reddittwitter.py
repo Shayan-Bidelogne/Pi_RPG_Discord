@@ -93,10 +93,15 @@ async def download_and_prepare_media(url: str, filename_hint: str = "") -> tuple
     """
     Download URL, prepare a temp file and return (path, kind) where kind is "video" or "image".
     Returns (None, None) on failure. Will transcode to mp4 via ffmpeg if necessary.
+
+    Prioritise filename_hint extension (ex: ID.mp4) because Discord attachments keep the real filename.
     """
+    hint_ext = (os.path.splitext((filename_hint or "").split("?")[0])[1] or "").lower()
+
     async with aiohttp.ClientSession() as session:
-        # get content-type
+        # first try to HEAD to detect content-type
         ctype = await _head_get_content_type(session, url)
+        # then GET the bytes (we need them anyway)
         try:
             async with session.get(url, timeout=60) as resp:
                 if resp.status != 200:
@@ -106,8 +111,35 @@ async def download_and_prepare_media(url: str, filename_hint: str = "") -> tuple
             return None, None
 
     lower = url.lower()
-    # image detection
-    if ctype.startswith("image") or any(lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+
+    # If filename hint explicitly signals a video extension, prefer video flow
+    if hint_ext in VIDEO_EXTS:
+        # if it's already mp4, save directly
+        if hint_ext == ".mp4" or ("mp4" in (ctype or "")) or lower.endswith(".mp4"):
+            path = await _save_bytes(data, ".mp4")
+            return path, "video"
+        # else attempt transcode if ffmpeg available
+        if _ffmpeg_available():
+            in_path = await _save_bytes(data, hint_ext or ".tmp")
+            out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            out_path = out_tmp.name
+            out_tmp.close()
+            ok = await _transcode_to_mp4(in_path, out_path)
+            try:
+                os.unlink(in_path)
+            except Exception:
+                pass
+            if ok and os.path.exists(out_path):
+                return out_path, "video"
+            try:
+                if os.path.exists(out_path):
+                    os.unlink(out_path)
+            except Exception:
+                pass
+        return None, None
+
+    # Image detection (explicit)
+    if ctype and ctype.startswith("image") or any(lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")) or hint_ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
         ext = IMAGE_CT_EXT.get(ctype)
         if not ext:
             # infer from filename hint or url
@@ -120,10 +152,10 @@ async def download_and_prepare_media(url: str, filename_hint: str = "") -> tuple
         path = await _save_bytes(data, ext)
         return path, "image"
 
-    # video detection
-    if ctype.startswith("video") or any(lower.endswith(ext) for ext in VIDEO_EXTS):
+    # Video detection (fallback if HEAD indicates video or url endswith video ext)
+    if (ctype and ctype.startswith("video")) or any(lower.endswith(ext) for ext in VIDEO_EXTS):
         # if mp4 already
-        if "mp4" in ctype or lower.endswith(".mp4"):
+        if "mp4" in (ctype or "") or lower.endswith(".mp4"):
             path = await _save_bytes(data, ".mp4")
             return path, "video"
         # otherwise try transcode to mp4 if ffmpeg available
