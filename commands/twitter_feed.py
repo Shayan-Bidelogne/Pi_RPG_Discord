@@ -158,24 +158,87 @@ class TwitterFeedListener(commands.Cog):
                 if video_download_url:
                     try:
                         async with aiohttp.ClientSession() as session:
-                            async with session.get(video_download_url, timeout=60) as resp:
-                                if resp.status == 200:
-                                    data = await resp.read()
-                                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                                    try:
-                                        # name file with tweet id to help grouping later
-                                        tmp.write(data)
-                                        tmp.close()
-                                        discord_file = discord.File(tmp.name, filename=f"{tid}.mp4")
-                                        await channel.send(embed=embed, file=discord_file)
-                                    finally:
-                                        try:
-                                            os.unlink(tmp.name)
-                                        except Exception:
-                                            pass
+                            # download video bytes
+                            async with session.get(video_download_url, timeout=60) as vresp:
+                                if vresp.status == 200:
+                                    vdata = await vresp.read()
                                 else:
-                                    # download failed -> send embed (thumbnail) only
                                     await channel.send(embed=embed)
+                                    continue
+
+                            # prepare thumbnail: prefer image_url (preview) if available, else try to extract a still later
+                            thumb_path = None
+                            if image_url:
+                                try:
+                                    async with session.get(image_url, timeout=30) as tresp:
+                                        if tresp.status == 200:
+                                            tdata = await tresp.read()
+                                            thumb_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+                                            try:
+                                                thumb_tmp.write(tdata)
+                                                thumb_tmp.close()
+                                                thumb_path = thumb_tmp.name
+                                            except Exception:
+                                                try:
+                                                    os.unlink(thumb_tmp.name)
+                                                except Exception:
+                                                    pass
+                                except Exception:
+                                    thumb_path = None
+
+                            # save video to temp file
+                            vid_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                            try:
+                                vid_tmp.write(vdata)
+                                vid_tmp.close()
+                                video_path = vid_tmp.name
+                            except Exception:
+                                try:
+                                    os.unlink(vid_tmp.name)
+                                except Exception:
+                                    pass
+                                await channel.send(embed=embed)
+                                continue
+
+                            # if we have a thumbnail file, reference it in the embed as attachment://<filename>
+                            files_to_send = []
+                            if thumb_path:
+                                thumb_filename = f"{tid}_thumb.jpg"
+                                files_to_send.append(discord.File(thumb_path, filename=thumb_filename))
+                                embed.set_image(url=f"attachment://{thumb_filename}")
+
+                            # attach video file (name with tweet id to help grouping)
+                            video_filename = f"{tid}.mp4"
+                            files_to_send.append(discord.File(video_path, filename=video_filename))
+
+                            # send embed + files in one message
+                            await channel.send(embed=embed, files=files_to_send)
+
+                            # cleanup temp files
+                            try:
+                                if thumb_path and os.path.exists(thumb_path):
+                                    os.unlink(thumb_path)
+                            except Exception:
+                                pass
+                            try:
+                                if os.path.exists(video_path):
+                                    os.unlink(video_path)
+                            except Exception:
+                                pass
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                               
+                        # end session context
                     except Exception as e:
                         print(f"[TwitterFeedListener] Error downloading/video attaching {video_download_url}: {e}")
                         await channel.send(embed=embed)
