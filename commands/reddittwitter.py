@@ -42,13 +42,11 @@ class RedditPoster(commands.Cog):
             await interaction.response.send_message("❌ Library channel not found.", ephemeral=True)
             return
 
-        # Récupère les 50 derniers messages
         messages = [msg async for msg in channel.history(limit=50)]
         if not messages:
             await interaction.response.send_message("❌ No tweets in the library.", ephemeral=True)
             return
 
-        # helper: crée un label sûr (1-100 chars) et explicite
         def make_label(msg, idx):
             preview = (msg.content or "").replace("\n", " ").strip()
             if preview:
@@ -62,7 +60,21 @@ class RedditPoster(commands.Cog):
             label = f"#{idx+1} — {preview}"
             return label[:100] or "[No text]"
 
-        # ---------- Menu de sélection du tweet ----------
+        # ---------- Modal to ask for title ----------
+        class TitleModal(ui.Modal):
+            def __init__(self, msg, idx):
+                super().__init__(title="Enter Reddit post title")
+                self.msg = msg
+                self.idx = idx
+                self.title_input = ui.TextInput(label="Title (max 300 chars)", style=discord.TextStyle.short, max_length=300)
+                self.add_item(self.title_input)
+
+            async def on_submit(self, modal_inter: discord.Interaction):
+                title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
+                # send subreddit choice view
+                await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.msg, self.idx, title), ephemeral=True)
+
+        # ---------- Tweet selection ----------
         class TweetSelect(ui.Select):
             def __init__(self, messages):
                 options = [
@@ -75,76 +87,91 @@ class RedditPoster(commands.Cog):
             async def callback(self, interaction2: discord.Interaction):
                 idx = int(self.values[0])
                 msg = self.messages[idx]
-                # store selected tweet on the view for next step
-                view = SubredditView(msg)
-                await interaction2.response.send_message("Choose a subreddit:", view=view, ephemeral=True)
+                await interaction2.response.send_modal(TitleModal(msg, idx))
 
         class TweetView(ui.View):
             def __init__(self, messages):
                 super().__init__(timeout=120)
                 self.add_item(TweetSelect(messages))
 
-        # ---------- Menu subreddit (view + select) ----------
+        # ---------- Subreddit selection ----------
         class SubredditSelect(ui.Select):
-            def __init__(self, msg):
+            def __init__(self, msg, idx, title):
                 options = [discord.SelectOption(label=sub, value=sub) for sub in SUBREDDITS[:25]]
                 super().__init__(placeholder="Choose a subreddit...", options=options, min_values=1, max_values=1)
                 self.msg = msg
+                self.idx = idx
+                self.title = title
 
             async def callback(self, interaction3: discord.Interaction):
                 subreddit_name = self.values[0]
-                msg = self.msg
+                # build preview embed
+                embed = discord.Embed(title=self.title[:300], color=discord.Color.blurple())
+                content = (self.msg.content or "").strip()
+                if content:
+                    embed.add_field(name="Content", value=content[:1024], inline=False)
+                if self.msg.attachments:
+                    att = self.msg.attachments[0]
+                    if att.content_type and att.content_type.startswith("image"):
+                        embed.set_image(url=att.url)
+                    else:
+                        embed.add_field(name="Attachment", value=att.url, inline=False)
+                embed.set_footer(text=f"Subreddit: r/{subreddit_name}")
 
-                # Gestion média si attachments
-                media_info = None
-                if msg.attachments:
-                    att = msg.attachments[0]
-                    content_type = getattr(att, "content_type", "") or ""
-                    media_info = {
-                        "url": att.url,
-                        "type": "photo" if content_type.startswith("image") else "video"
-                    }
+                await interaction3.response.send_message("Preview — confirm before posting:", embed=embed, view=ConfirmView(self.msg, self.idx, self.title, subreddit_name), ephemeral=True)
 
-                await interaction3.response.defer(ephemeral=True)
+        class SubredditView(ui.View):
+            def __init__(self, msg, idx, title):
+                super().__init__(timeout=120)
+                self.add_item(SubredditSelect(msg, idx, title))
+
+        # ---------- Confirm / Cancel ----------
+        class ConfirmView(ui.View):
+            def __init__(self, msg, idx, title, subreddit_name):
+                super().__init__(timeout=120)
+                self.msg = msg
+                self.idx = idx
+                self.title = title
+                self.subreddit_name = subreddit_name
+
+            @ui.button(label="Confirm", style=discord.ButtonStyle.success)
+            async def confirm(self, interaction4: discord.Interaction, button: ui.Button):
+                await interaction4.response.defer(ephemeral=True)
                 try:
-                    subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-
-                    if media_info:
+                    subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
+                    # handle media if exists
+                    if self.msg.attachments:
+                        att = self.msg.attachments[0]
+                        content_type = getattr(att, "content_type", "") or ""
                         async with aiohttp.ClientSession() as session:
-                            async with session.get(media_info["url"]) as resp:
+                            async with session.get(att.url) as resp:
                                 if resp.status == 200:
-                                    suffix = ".mp4" if media_info["type"] == "video" else None
+                                    suffix = ".mp4" if not content_type.startswith("image") else None
                                     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
                                     tmp_file.write(await resp.read())
                                     tmp_file.close()
-                                    if media_info["type"] == "photo":
-                                        submission = await subreddit_obj.submit_image(
-                                            title=(msg.content or "")[:300],
-                                            image_path=tmp_file.name
-                                        )
-                                    else:
-                                        submission = await subreddit_obj.submit_video(
-                                            title=(msg.content or "")[:300],
-                                            video_path=tmp_file.name
-                                        )
                                     try:
-                                        os.unlink(tmp_file.name)
-                                    except Exception:
-                                        pass
+                                        if content_type.startswith("image"):
+                                            submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=tmp_file.name)
+                                        else:
+                                            submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=tmp_file.name)
+                                    finally:
+                                        try:
+                                            os.unlink(tmp_file.name)
+                                        except Exception:
+                                            pass
                                 else:
-                                    await interaction3.followup.send("❌ Failed to download attachment.", ephemeral=True)
+                                    await interaction4.followup.send("❌ Failed to download attachment.", ephemeral=True)
                                     return
                     else:
-                        submission = await subreddit_obj.submit(title=(msg.content or "")[:300], selftext=(msg.content or ""))
-
-                    await interaction3.followup.send(f"✅ Reddit post published: https://reddit.com{submission.permalink}", ephemeral=True)
+                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.msg.content or ""))
+                    await interaction4.followup.send(f"✅ Reddit post published: https://reddit.com{submission.permalink}", ephemeral=True)
                 except Exception as e:
-                    await interaction3.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
+                    await interaction4.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
 
-        class SubredditView(ui.View):
-            def __init__(self, msg):
-                super().__init__(timeout=120)
-                self.add_item(SubredditSelect(msg))
+            @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+            async def cancel(self, interaction4: discord.Interaction, button: ui.Button):
+                await interaction4.response.send_message("Cancelled.", ephemeral=True)
 
         await interaction.response.send_message("📚 Select a tweet from the library:", view=TweetView(messages), ephemeral=True)
 
