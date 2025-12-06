@@ -11,7 +11,7 @@ import aiohttp
 import tempfile
 import re
 
-# ================== CONFIG depuis l'environnement ==================
+# ================== CONFIG ==================
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")  # ex: "pirpg"
 DISCORD_CHANNEL_TWITTER_ID = int(os.environ.get("DISCORD_CHANNEL_TWITTER_ID", "1439549538556973106"))  # #AAA
@@ -24,9 +24,8 @@ REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
 REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
-# ==================================================================
 
-# Initialisation Reddit
+# ================== Init Reddit ==================
 reddit = asyncpraw.Reddit(
     client_id=REDDIT_CLIENT_ID,
     client_secret=REDDIT_CLIENT_SECRET,
@@ -35,7 +34,7 @@ reddit = asyncpraw.Reddit(
     user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
 
-# ------------------- Cog Twitter -------------------
+# ================== Cog Twitter ==================
 class TwitterFeedListener(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -43,6 +42,7 @@ class TwitterFeedListener(commands.Cog):
         self.user_id = None
         self.posted_tweet_ids = self.load_posted_tweets()
         self.last_tweet = None
+        self.last_includes = None
         self.check_tweets.start()
 
     def cog_unload(self):
@@ -65,7 +65,7 @@ class TwitterFeedListener(commands.Cog):
             print(f"[TwitterFeedListener] Erreur sauvegarde tweets : {e}")
 
     def get_last_tweet_full(self):
-        return self.last_tweet
+        return self.last_tweet, self.last_includes
 
     @tasks.loop(minutes=CHECK_INTERVAL_MINUTES)
     async def check_tweets(self):
@@ -123,6 +123,7 @@ class TwitterFeedListener(commands.Cog):
                 self.posted_tweet_ids.add(tweet.id)
                 self.save_posted_tweets()
                 self.last_tweet = tweet
+                self.last_includes = tweets.includes if tweets.includes else {}
 
         except tweepy.TooManyRequests as e:
             reset_timestamp = e.response.headers.get("x-rate-limit-reset")
@@ -137,9 +138,7 @@ class TwitterFeedListener(commands.Cog):
     async def before_check_tweets(self):
         await self.bot.wait_until_ready()
 
-
-# ------------------- Cog Reddit -------------------
-# ------------------- Cog Reddit corrigé -------------------
+# ================== Cog Reddit ==================
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -147,23 +146,16 @@ class RedditPoster(commands.Cog):
     @app_commands.command(name="reddit", description="Poster le dernier tweet sur Reddit avec confirmation")
     async def reddit_from_tweet(self, interaction: discord.Interaction):
         listener: TwitterFeedListener = self.bot.get_cog("TwitterFeedListener")
-        tweet = listener.get_last_tweet_full()
+        tweet, includes = listener.get_last_tweet_full()
 
         if not tweet:
             await interaction.response.send_message("❌ Aucun tweet disponible pour poster.", ephemeral=True)
             return
 
-        # Récupérer les médias depuis l'objet tweets complet
-        tweets_obj = listener.client.get_users_tweets(
-            id=listener.user_id,
-            max_results=5,
-            tweet_fields=["attachments"],
-            expansions=["attachments.media_keys"],
-            media_fields=["url", "preview_image_url", "type", "variants"]
-        )
+        # Construire media_dict depuis includes
         media_dict = {}
-        if hasattr(tweets_obj, "includes") and tweets_obj.includes:
-            media_list = tweets_obj.includes.get("media", [])
+        if includes:
+            media_list = includes.get("media", [])
             for m in media_list:
                 media_dict[m["media_key"]] = m
 
@@ -171,9 +163,9 @@ class RedditPoster(commands.Cog):
         if tweet.attachments and "media_keys" in tweet.attachments:
             for key in tweet.attachments["media_keys"]:
                 media_info = media_dict.get(key)
-                break  # prendre seulement le premier média pour Reddit
+                break
 
-        # Création de l'embed de confirmation
+        # Création de l'embed Discord
         embed = discord.Embed(
             description=tweet.text,
             color=discord.Color.orange(),
@@ -188,7 +180,7 @@ class RedditPoster(commands.Cog):
             if url_preview:
                 embed.set_image(url=url_preview)
 
-        # ---------- Menu select pour subreddit ----------
+        # ---------- Menu select subreddit ----------
         class SubredditSelect(ui.View):
             def __init__(self):
                 super().__init__(timeout=120)
@@ -206,6 +198,7 @@ class RedditPoster(commands.Cog):
                 await interaction2.response.defer()
                 try:
                     subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
+
                     # Gestion média
                     if media_info:
                         if media_info["type"] == "photo":
@@ -254,3 +247,8 @@ class RedditPoster(commands.Cog):
         await interaction.response.send_message(
             f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True
         )
+
+# ================== Setup ==================
+async def setup(bot):
+    await bot.add_cog(TwitterFeedListener(bot))
+    await bot.add_cog(RedditPoster(bot))
