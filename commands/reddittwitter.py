@@ -47,14 +47,52 @@ class RedditPoster(commands.Cog):
             await interaction.response.send_message("❌ No tweets in the library.", ephemeral=True)
             return
 
+        # helper to extract text/media from archived tweet message (supports embed + attachments)
+        def extract_message_data(msg):
+            text = (msg.content or "").strip()
+            image_url = None
+            attachment_url = None
+            tweet_id = None
+
+            # If message uses an embed (twitter_feed uses embed.description & footer)
+            if msg.embeds:
+                emb = msg.embeds[0]
+                if getattr(emb, "description", None):
+                    text = emb.description.strip()
+                # image in embed
+                if getattr(emb, "image", None) and getattr(emb.image, "url", None):
+                    image_url = emb.image.url
+                # footer may contain "Tweet ID: <id>"
+                if getattr(emb, "footer", None) and getattr(emb.footer, "text", None):
+                    footer = emb.footer.text
+                    if footer.startswith("Tweet ID:"):
+                        tweet_id = footer.split(":", 1)[1].strip()
+
+            # attachments fallback
+            if msg.attachments and not image_url:
+                att = msg.attachments[0]
+                attachment_url = att.url
+                # prefer attachment if it's an image
+                ct = getattr(att, "content_type", "") or ""
+                if ct.startswith("image"):
+                    image_url = att.url
+
+            return {
+                "text": text or "",
+                "image_url": image_url,
+                "attachment_url": attachment_url,
+                "tweet_id": tweet_id,
+            }
+
         def make_label(msg, idx):
-            preview = (msg.content or "").replace("\n", " ").strip()
+            data = extract_message_data(msg)
+            preview = (data["text"] or "").replace("\n", " ").strip()
             if preview:
                 preview = self.clean_label(preview)
-            elif msg.attachments:
-                att = msg.attachments[0]
-                name = getattr(att, "filename", None) or att.url or "Attachment"
-                preview = name.replace("\n", " ").strip()
+            elif data["image_url"]:
+                preview = "Image"
+            elif data["attachment_url"]:
+                preview = "Attachment"
             else:
                 preview = "[No text]"
             label = f"#{idx+1} — {preview}"
@@ -71,7 +109,6 @@ class RedditPoster(commands.Cog):
 
             async def on_submit(self, modal_inter: discord.Interaction):
                 title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
-                # send subreddit choice view
                 await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.msg, self.idx, title), ephemeral=True)
 
         # ---------- Tweet selection ----------
@@ -105,17 +142,15 @@ class RedditPoster(commands.Cog):
 
             async def callback(self, interaction3: discord.Interaction):
                 subreddit_name = self.values[0]
-                # build preview embed
+                data = extract_message_data(self.msg)
+
                 embed = discord.Embed(title=self.title[:300], color=discord.Color.blurple())
-                content = (self.msg.content or "").strip()
-                if content:
-                    embed.add_field(name="Content", value=content[:1024], inline=False)
-                if self.msg.attachments:
-                    att = self.msg.attachments[0]
-                    if att.content_type and att.content_type.startswith("image"):
-                        embed.set_image(url=att.url)
-                    else:
-                        embed.add_field(name="Attachment", value=att.url, inline=False)
+                if data["text"]:
+                    embed.add_field(name="Content", value=data["text"][:1024], inline=False)
+                if data["image_url"]:
+                    embed.set_image(url=data["image_url"])
+                elif data["attachment_url"]:
+                    embed.add_field(name="Attachment", value=data["attachment_url"], inline=False)
                 embed.set_footer(text=f"Subreddit: r/{subreddit_name}")
 
                 await interaction3.response.send_message("Preview — confirm before posting:", embed=embed, view=ConfirmView(self.msg, self.idx, self.title, subreddit_name), ephemeral=True)
@@ -138,21 +173,22 @@ class RedditPoster(commands.Cog):
             async def confirm(self, interaction4: discord.Interaction, button: ui.Button):
                 await interaction4.response.defer(ephemeral=True)
                 try:
+                    data = extract_message_data(self.msg)
                     subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
-                    # handle media if exists
                     submission = None
-                    if self.msg.attachments:
-                        att = self.msg.attachments[0]
-                        content_type = getattr(att, "content_type", "") or ""
+
+                    # If we have an image URL (from embed or attachment), download and post image
+                    media_url = data["image_url"] or data["attachment_url"]
+                    if media_url:
                         async with aiohttp.ClientSession() as session:
-                            async with session.get(att.url) as resp:
+                            async with session.get(media_url) as resp:
                                 if resp.status == 200:
-                                    suffix = ".mp4" if not content_type.startswith("image") else None
+                                    suffix = ".mp4" if media_url.endswith(".mp4") else None
                                     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
                                     tmp_file.write(await resp.read())
                                     tmp_file.close()
                                     try:
-                                        if content_type.startswith("image"):
+                                        if suffix is None:
                                             submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=tmp_file.name)
                                         else:
                                             submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=tmp_file.name)
@@ -165,9 +201,8 @@ class RedditPoster(commands.Cog):
                                     await interaction4.followup.send("❌ Failed to download attachment.", ephemeral=True)
                                     return
                     else:
-                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.msg.content or ""))
+                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(data["text"] or ""))
 
-                    # Ensure submission is loaded so permalink is available, then build a safe URL
                     if submission is not None:
                         try:
                             await submission.load()
