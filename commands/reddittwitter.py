@@ -56,96 +56,20 @@ class RedditPoster(commands.Cog):
                 self.messages = messages
                 self.clean_label_func = clean_label_func
 
-                options = [
-                    discord.SelectOption(
-                        label=clean_label_func(msg.content),
-                        value=str(i)
-                    )
-                    for i, msg in enumerate(messages)
-                ]
+                options = []
 
-                self.select = ui.Select(
-                    placeholder="Choisis un tweet...",
-                    options=options,
-                    custom_id="tweet_select",
-                    min_values=1,
-                    max_values=1
-                )
-                self.add_item(self.select)
-                self.select.callback = self.select_callback
-
-            async def select_callback(self, interaction2: discord.Interaction):
-                idx = int(self.select.values[0])
-                msg = self.messages[idx]
-
-                # Construire media_info si attachments
-                media_info = None
-                if msg.attachments:
-                    att = msg.attachments[0]
-                    media_info = {
-                        "url": att.url,
-                        "type": "photo" if att.content_type.startswith("image") else "video"
-                    }
-
-                # Embedding du tweet
-                embed = discord.Embed(
-                    description=msg.content,
-                    color=discord.Color.orange()
-                )
-                embed.set_author(
-                    name=f"Twitter - @{os.environ.get('TWITTER_USERNAME')}",
-                    url=f"https://twitter.com/{os.environ.get('TWITTER_USERNAME')}/status/{msg.id}"
-                )
-                if media_info and media_info["type"] == "photo":
-                    embed.set_image(url=media_info["url"])
-
-                await interaction2.response.defer()
-
-                try:
-                    subreddit_name = "test"  # ou ajouter un menu pour choisir subreddit
-                    subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-
-                    # Poster média si présent
-                    if media_info:
-                        if media_info["type"] == "photo":
-                            async with aiohttp.ClientSession() as session:
-                                async with session.get(media_info["url"]) as resp:
-                                    if resp.status == 200:
-                                        tmp_file = tempfile.NamedTemporaryFile(delete=False)
-                                        tmp_file.write(await resp.read())
-                                        tmp_file.close()
-                                        submission = await subreddit_obj.submit_image(
-                                            title=msg.content[:300],
-                                            image_path=tmp_file.name
-                                        )
-                                        os.unlink(tmp_file.name)
-                        elif media_info["type"] == "video":
-                            async with aiohttp.ClientSession() as session:
-                                async with session.get(media_info["url"]) as resp:
-                                    if resp.status == 200:
-                                        tmp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-                                        tmp_file.write(await resp.read())
-                                        tmp_file.close()
-                                        submission = await subreddit_obj.submit_video(
-                                            title=msg.content[:300],
-                                            video_path=tmp_file.name
-                                        )
-                                        os.unlink(tmp_file.name)
-                    else:
-                        submission = await subreddit_obj.submit(title=msg.content[:300], selftext=msg.content)
-
-                    await interaction2.followup.send(
-                        f"✅ Post Reddit publié : https://reddit.com{submission.permalink}",
-                        ephemeral=True
-                    )
-                except Exception as e:
-                    await interaction2.followup.send(f"❌ Erreur Reddit : {e}", ephemeral=True)
-
-        view = TweetSelect(messages, clean_label_func=self.clean_label)
-        await interaction.response.send_message(
-            "📚 Sélectionne un tweet dans la bibliothèque :", view=view, ephemeral=True
-        )
-
-
-async def setup(bot):
-    await bot.add_cog(RedditPoster(bot))
+                def make_label(msg):
+                    txt = (msg.content or "").replace("\n", " ").strip()
+                    if txt:
+                        # reuse existing cleaning logic
+                        return self.clean_label_func(txt)
+                    # fallback to attachment filename or URL
+                    if msg.attachments:
+                        att = msg.attachments[0]
+                        name = getattr(att, "filename", None) or getattr(att, "url", "") or "Attachment"
+                        name = name.replace("\n", " ").strip()
+                        if not name:
+                            name = "Attachment"
+                        return name[:100]
+                    # final fallback
+                    return "[No text]"
