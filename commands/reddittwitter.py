@@ -6,7 +6,9 @@ import asyncpraw
 import aiohttp
 import tempfile
 import re
-from twitter_feed import TwitterFeedListener
+
+# Import relatif pour TwitterFeedListener
+from .twitter_feed import TwitterFeedListener
 
 # ================== CONFIG ==================
 DISCORD_CHANNEL_CONFIRM_ID = int(os.environ.get("DISCORD_CHANNEL_CONFIRM_ID", "1401352070505824306"))
@@ -25,8 +27,8 @@ reddit = asyncpraw.Reddit(
     password=REDDIT_PASSWORD,
     user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
-# ============================================
 
+# ================== Cog Reddit ==================
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -53,15 +55,15 @@ class RedditPoster(commands.Cog):
                 media_info = media_dict.get(key)
                 break
 
-        # Création de l'embed Discord
+        # Création embed Discord
         embed = discord.Embed(
             description=tweet.text,
             color=discord.Color.orange(),
             timestamp=tweet.created_at
         )
         embed.set_author(
-            name=f"Twitter - @{tweet.author.username if hasattr(tweet, 'author') else 'pirpg'}",
-            url=f"https://twitter.com/{os.getenv('TWITTER_USERNAME')}/status/{tweet.id}"
+            name=f"Twitter - @{listener.client.get_user(id=listener.user_id).data.username}",
+            url=f"https://twitter.com/{listener.client.get_user(id=listener.user_id).data.username}/status/{tweet.id}"
         )
         if media_info:
             url_preview = media_info.get("url") or media_info.get("preview_image_url")
@@ -81,13 +83,12 @@ class RedditPoster(commands.Cog):
                     discord.SelectOption(label="r/mySubreddit2", value="mySubreddit2"),
                 ]
             )
-            async def select_callback(self, select: ui.Select, interaction2: discord.Interaction):
-                subreddit_name = select.values[0]  # ✅ Correct
+            async def select_callback(self, select: discord.ui.Select, interaction2: discord.Interaction):
+                subreddit_name = select.values[0]
                 await interaction2.response.defer()
                 try:
                     subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
 
-                    # Gestion média
                     if media_info:
                         if media_info["type"] == "photo":
                             async with aiohttp.ClientSession() as session:
@@ -136,5 +137,6 @@ class RedditPoster(commands.Cog):
             f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True
         )
 
+# ---------- Setup Cog ----------
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))

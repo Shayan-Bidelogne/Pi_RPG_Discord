@@ -8,7 +8,7 @@ import time
 
 # ================== CONFIG ==================
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
-TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")  # ex: "pirpg"
+TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 DISCORD_CHANNEL_TWITTER_ID = int(os.environ.get("DISCORD_CHANNEL_TWITTER_ID", "1439549538556973106"))
 CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))
 POSTED_TWEETS_FILE = "posted_tweet_ids.json"
@@ -27,6 +27,7 @@ class TwitterFeedListener(commands.Cog):
     def cog_unload(self):
         self.check_tweets.cancel()
 
+    # ---------- Gestion persistance ----------
     def load_posted_tweets(self):
         if os.path.exists(POSTED_TWEETS_FILE):
             try:
@@ -46,6 +47,7 @@ class TwitterFeedListener(commands.Cog):
     def get_last_tweet_full(self):
         return self.last_tweet, self.last_includes
 
+    # ---------- Boucle principale ----------
     @tasks.loop(minutes=CHECK_INTERVAL_MINUTES)
     async def check_tweets(self):
         try:
@@ -118,5 +120,6 @@ class TwitterFeedListener(commands.Cog):
         await self.bot.wait_until_ready()
 
 
+# ---------- Setup Cog ----------
 async def setup(bot):
     await bot.add_cog(TwitterFeedListener(bot))
