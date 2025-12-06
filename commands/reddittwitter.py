@@ -1,9 +1,6 @@
 import os
-import shutil
 import asyncio
-import subprocess
 import tempfile
-import re
 
 import discord
 from discord import app_commands, ui
@@ -38,30 +35,6 @@ IMAGE_CT_EXT = {
     "image/gif": ".gif",
 }
 
-VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".mkv")
-
-
-def _ffmpeg_available() -> bool:
-    return shutil.which("ffmpeg") is not None
-
-
-def _ffmpeg_transcode_block(in_path: str, out_path: str) -> bool:
-    cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-y", "-i", in_path,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-        "-c:a", "aac", "-b:a", "128k",
-        "-movflags", "+faststart",
-        out_path,
-    ]
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    return p.returncode == 0
-
-
-async def _transcode_to_mp4(in_path: str, out_path: str) -> bool:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _ffmpeg_transcode_block, in_path, out_path)
-
 
 async def _save_bytes(data: bytes, suffix: str) -> str:
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
@@ -78,7 +51,6 @@ async def _head_get_content_type(session: aiohttp.ClientSession, url: str) -> st
                 return c.split(";", 1)[0].lower()
     except Exception:
         pass
-    # fallback to small GET if HEAD failed
     try:
         headers = {"Range": "bytes=0-1023"}
         async with session.get(url, headers=headers, timeout=10) as resp:
@@ -90,101 +62,27 @@ async def _head_get_content_type(session: aiohttp.ClientSession, url: str) -> st
     return ""
 
 
-async def download_and_prepare_media(url: str, filename_hint: str = "") -> tuple:
-    """
-    Download URL, prepare a temp file and return (path, kind) where kind is "video" or "image".
-    Returns (None, None) on failure. Will transcode to mp4 via ffmpeg if necessary.
-
-    Prioritise filename_hint extension (ex: ID.mp4) because Discord attachments keep the real filename.
-    """
-    hint_ext = (os.path.splitext((filename_hint or "").split("?")[0])[1] or "").lower()
-
+async def download_image(url: str, filename_hint: str = "") -> str:
     async with aiohttp.ClientSession() as session:
-        # first try to HEAD to detect content-type
         ctype = await _head_get_content_type(session, url)
-        # then GET the bytes (we need them anyway)
         try:
             async with session.get(url, timeout=60) as resp:
                 if resp.status != 200:
-                    return None, None
+                    return None
                 data = await resp.read()
         except Exception:
-            return None, None
+            return None
 
+    ext = IMAGE_CT_EXT.get(ctype)
     lower = url.lower()
-
-    # If filename hint explicitly signals a video extension, prefer video flow
-    if hint_ext in VIDEO_EXTS:
-        # if it's already mp4, save directly
-        if hint_ext == ".mp4" or ("mp4" in (ctype or "")) or lower.endswith(".mp4"):
-            path = await _save_bytes(data, ".mp4")
-            return path, "video"
-        # else attempt transcode if ffmpeg available
-        if _ffmpeg_available():
-            in_path = await _save_bytes(data, hint_ext or ".tmp")
-            out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            out_path = out_tmp.name
-            out_tmp.close()
-            ok = await _transcode_to_mp4(in_path, out_path)
-            try:
-                os.unlink(in_path)
-            except Exception:
-                pass
-            if ok and os.path.exists(out_path):
-                return out_path, "video"
-            try:
-                if os.path.exists(out_path):
-                    os.unlink(out_path)
-            except Exception:
-                pass
-        return None, None
-
-    # Image detection (explicit)
-    if ctype and ctype.startswith("image") or any(lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")) or hint_ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-        ext = IMAGE_CT_EXT.get(ctype)
-        if not ext:
-            # infer from filename hint or url
-            for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                if (filename_hint or lower).lower().endswith(e) or lower.endswith(e):
-                    ext = e
-                    break
-        if not ext:
-            ext = ".jpg"
-        path = await _save_bytes(data, ext)
-        return path, "image"
-
-    # Video detection (fallback if HEAD indicates video or url endswith video ext)
-    if (ctype and ctype.startswith("video")) or any(lower.endswith(ext) for ext in VIDEO_EXTS):
-        # if mp4 already
-        if "mp4" in (ctype or "") or lower.endswith(".mp4"):
-            path = await _save_bytes(data, ".mp4")
-            return path, "video"
-        # otherwise try transcode to mp4 if ffmpeg available
-        if _ffmpeg_available():
-            in_ext = os.path.splitext(filename_hint or lower)[1] or ".tmp"
-            in_path = await _save_bytes(data, in_ext)
-            out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            out_path = out_tmp.name
-            out_tmp.close()
-            ok = await _transcode_to_mp4(in_path, out_path)
-            try:
-                os.unlink(in_path)
-            except Exception:
-                pass
-            if ok and os.path.exists(out_path):
-                return out_path, "video"
-            else:
-                try:
-                    if os.path.exists(out_path):
-                        os.unlink(out_path)
-                except Exception:
-                    pass
-                return None, None
-        # no ffmpeg -> cannot convert
-        return None, None
-
-    # unknown
-    return None, None
+    if not ext:
+        for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+            if (filename_hint or lower).lower().endswith(e) or lower.endswith(e):
+                ext = e
+                break
+    if not ext:
+        ext = ".jpg"
+    return await _save_bytes(data, ext)
 
 
 # ================== Cog ==================
@@ -198,7 +96,6 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
-        # Defer immediately to avoid "This interaction failed" during processing
         await interaction.response.defer(ephemeral=True)
 
         channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
@@ -211,46 +108,32 @@ class RedditPoster(commands.Cog):
             await interaction.followup.send("❌ No tweets in the library.", ephemeral=True)
             return
 
-        # extract message data, prefer attachments over embeds
-        # helper to extract text/media/tweet_id from a message (supports embed.video, embed.image & attachments)
         def extract_message_data(msg):
             text = (msg.content or "").strip()
             image_url = None
             attachment_url = None
             tweet_id = None
             filename = ""
-            media_type = None  # "image" or "video" or None
 
-            # Prefer embed description(s) for the tweet text (append if both content & embed exist)
             if msg.embeds:
-                # sometimes there are multiple embeds; concatenate descriptions
                 for emb in msg.embeds:
                     if getattr(emb, "description", None):
                         desc = emb.description.strip()
                         if desc:
                             text = f"{text}\n{desc}".strip() if text else desc
-                    # embed media fallback
-                    emb_video = getattr(getattr(emb, "video", None), "url", None)
                     emb_image = getattr(getattr(emb, "image", None), "url", None)
-                    if emb_video and not attachment_url:
-                        attachment_url = emb_video
-                        media_type = "video"
                     if emb_image and not image_url:
                         image_url = emb_image
-                        media_type = media_type or "image"
-                    # footer may contain "Tweet ID: <id>"
                     footer = getattr(getattr(emb, "footer", None), "text", None)
                     if footer and isinstance(footer, str) and footer.startswith("Tweet ID:"):
                         tweet_id = footer.split(":", 1)[1].strip()
 
-            # Attachments: prefer real attachment URLs (these point to Discord CDN)
             if msg.attachments:
                 att = msg.attachments[0]
                 att_url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
                 filename = getattr(att, "filename", "") or ""
                 ct = (getattr(att, "content_type", "") or "").lower()
 
-                # If att_url is missing or not an http URL, reconstruct CDN URL as fallback
                 if not att_url and filename:
                     try:
                         channel_id = getattr(msg.channel, "id", None)
@@ -261,28 +144,10 @@ class RedditPoster(commands.Cog):
                         pass
 
                 if att_url:
-                    attachment_url = att_url
-                    # detect video types from content_type or filename
-                    if ct.startswith("video") or filename.lower().endswith((".mp4", ".mov", ".webm")):
-                        media_type = "video"
-                    elif ct.startswith("image") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                        # prefer image unless a video was already detected
-                        if media_type != "video":
-                            image_url = att_url
-                            media_type = "image"
-                    else:
-                        media_type = media_type or None
-
-                # If tweet_id not set from embed, try to extract it from the attachment filename (e.g. "<tweet_id>.mp4")
-                if not tweet_id and filename:
-                    m = re.search(r'(\d{5,})', filename)  # tweet ids are long numeric strings; adjust min length if needed
-                    if m:
-                        tweet_id = m.group(1)
-
-            # If no attachment found, keep embed urls (video preferred)
-            if not attachment_url:
-                # already handled above when processing embeds
-                pass
+                    # only treat as image if content-type or filename indicates image
+                    if ct.startswith("image") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                        attachment_url = att_url
+                        image_url = att_url
 
             return {
                 "text": text or "",
@@ -290,16 +155,13 @@ class RedditPoster(commands.Cog):
                 "attachment_url": attachment_url,
                 "filename": filename,
                 "tweet_id": tweet_id,
-                "media_type": media_type,
                 "message": msg,
             }
 
-        # Group messages by tweet_id when available or by tweet id found in filenames.
         grouped = {}
         order = []
         for msg in messages:
             data = extract_message_data(msg)
-            # use tweet_id when present; else fallback to filename-derived id if available; else message id
             key = data["tweet_id"] or (f"file:{data['filename']}" if data.get("filename") else f"msg:{msg.id}")
             if key not in grouped:
                 grouped[key] = {
@@ -307,30 +169,22 @@ class RedditPoster(commands.Cog):
                     "image_url": data["image_url"],
                     "attachment_url": data["attachment_url"],
                     "filename": data.get("filename"),
-                    "media_type": data["media_type"],
                     "messages": [data["message"]],
                     "tweet_id": data["tweet_id"],
                 }
                 order.append(key)
             else:
                 g = grouped[key]
-                # collect any non-empty text parts to join later
                 if data["text"] and data["text"] not in g["texts"]:
                     g["texts"].append(data["text"])
-                # prefer video attachment over image
-                if data["media_type"] == "video":
-                    g["attachment_url"] = data["attachment_url"]
-                    g["media_type"] = "video"
-                    g["filename"] = data.get("filename") or g.get("filename")
-                elif data["media_type"] == "image" and not g["image_url"]:
+                if not g["image_url"] and data["image_url"]:
                     g["image_url"] = data["image_url"]
-                    if not g["media_type"]:
-                        g["media_type"] = "image"
                 if not g["attachment_url"] and data["attachment_url"]:
                     g["attachment_url"] = data["attachment_url"]
+                if not g.get("filename") and data.get("filename"):
+                    g["filename"] = data.get("filename")
                 g["messages"].append(data["message"])
 
-        # finalize entries: join texts into a single content string and keep original key
         entries = []
         for k in order[:25]:
             g = grouped[k]
@@ -341,33 +195,26 @@ class RedditPoster(commands.Cog):
                 "image_url": g.get("image_url"),
                 "attachment_url": g.get("attachment_url"),
                 "filename": g.get("filename"),
-                "media_type": g.get("media_type"),
                 "messages": g.get("messages"),
                 "tweet_id": g.get("tweet_id"),
             })
 
-        # map for stable lookup from select value -> entry
         entry_map = {e["key"]: e for e in entries}
-
-        # capture cog instance for use inside nested UI classes (avoid self ambiguity)
         cog = self
 
         def make_label(entry, idx):
             preview = (entry["text"] or "").replace("\n", " ").strip()
             if preview:
                 preview = cog.clean_label(preview)
-            elif entry["media_type"] == "video":
-                preview = "Video"
-            elif entry["image_url"]:
+            elif entry.get("image_url"):
                 preview = "Image"
-            elif entry["attachment_url"]:
+            elif entry.get("attachment_url"):
                 preview = "Attachment"
             else:
                 preview = "[No text]"
             label = f"#{idx+1} — {preview}"
             return label[:100]
 
-        # UI components (Select uses stable key as value)
         class TitleModal(ui.Modal):
             def __init__(self, entry, idx):
                 super().__init__(title="Enter Reddit post title")
@@ -390,15 +237,12 @@ class RedditPoster(commands.Cog):
 
             async def callback(self, interaction3: discord.Interaction):
                 subreddit = self.values[0]
-                # build small preview embed
                 emb = discord.Embed(title=cog.clean_label(self.title[:100]), color=discord.Color.blurple())
                 text = (self.entry.get("text") or "").strip()
                 if text:
                     emb.add_field(name="Content", value=text[:1024], inline=False)
                 if self.entry.get("image_url"):
                     emb.set_image(url=self.entry.get("image_url"))
-                elif self.entry.get("media_type") == "video" and self.entry.get("filename"):
-                    emb.add_field(name="Video", value=self.entry.get("filename"), inline=False)
                 await interaction3.response.send_message(f"Ready to post to r/{subreddit} — confirm:", embed=emb, view=ConfirmView(self.entry, self.idx, self.title, subreddit), ephemeral=True)
 
         class SubredditView(ui.View):
@@ -422,73 +266,44 @@ class RedditPoster(commands.Cog):
                     subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
                     submission = None
 
-                    # Try attachments first using Attachment.read()
-                    media_path = None
-                    media_kind = None
+                    # Try attachments first (images only)
+                    image_path = None
                     for msg in self.entry.get("messages", []):
                         for att in getattr(msg, "attachments", []):
                             filename = getattr(att, "filename", "") or ""
-                            try:
-                                data = await att.read()
-                            except Exception:
-                                data = None
-                            if data:
-                                lf = filename.lower()
-                                if any(lf.endswith(ext) for ext in VIDEO_EXTS):
-                                    # if already mp4
-                                    if lf.endswith(".mp4"):
-                                        tmp_path = await _save_bytes(data, ".mp4")
-                                        media_path, media_kind = tmp_path, "video"
-                                        break
-                                    # transcode if possible
-                                    if _ffmpeg_available():
-                                        in_path = await _save_bytes(data, os.path.splitext(filename)[1] or ".tmp")
-                                        out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                                        out_path = out_tmp.name
-                                        out_tmp.close()
-                                        ok = await _transcode_to_mp4(in_path, out_path)
-                                        try:
-                                            os.unlink(in_path)
-                                        except Exception:
-                                            pass
-                                        if ok and os.path.exists(out_path):
-                                            media_path, media_kind = out_path, "video"
-                                            tmp_path = out_path
+                            ct = (getattr(att, "content_type", "") or "").lower()
+                            if ct.startswith("image") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                                try:
+                                    data = await att.read()
+                                except Exception:
+                                    data = None
+                                if data:
+                                    ext = None
+                                    for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                                        if filename.lower().endswith(e):
+                                            ext = e
                                             break
-                                        else:
-                                            try:
-                                                if os.path.exists(out_path):
-                                                    os.unlink(out_path)
-                                            except Exception:
-                                                pass
-                                            continue
-                                    else:
-                                        continue
-                                if any(lf.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
-                                    ext = os.path.splitext(filename)[1] or ".jpg"
+                                    if not ext:
+                                        ext = ".jpg"
                                     tmp_path = await _save_bytes(data, ext)
-                                    media_path, media_kind = tmp_path, "image"
+                                    image_path = tmp_path
                                     break
-                        if media_path:
+                        if image_path:
                             break
 
-                    # fallback to download via URL if no attachment bytes
-                    if not media_path:
-                        for candidate in (self.entry.get("attachment_url"), self.entry.get("image_url")):
-                            if not candidate:
-                                continue
-                            prepared = await download_and_prepare_media(candidate, filename_hint=self.entry.get("filename") or "")
-                            if prepared[0]:
-                                media_path, media_kind = prepared
-                                tmp_path = media_path
-                                break
+                    # fallback to embed image url
+                    if not image_path and self.entry.get("image_url"):
+                        img_tmp = await download_image(self.entry.get("image_url"), filename_hint=self.entry.get("filename") or "")
+                        if img_tmp:
+                            image_path = img_tmp
+                            tmp_path = img_tmp
 
-                    # Perform post
-                    if media_path:
-                        if media_kind == "video":
-                            submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=media_path)
-                        else:
-                            submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=media_path)
+                    if image_path:
+                        try:
+                            submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=image_path)
+                        except Exception as e:
+                            await interaction4.followup.send(f"❌ Image upload failed — post aborted. ({e})", ephemeral=True)
+                            return
                     else:
                         text = (self.entry.get("text") or "").strip()
                         if not text:
@@ -570,12 +385,6 @@ class RedditPoster(commands.Cog):
 
                     if entry.get("image_url"):
                         embed.set_image(url=entry.get("image_url"))
-                    elif entry.get("media_type") == "video" and entry.get("attachment_url"):
-                        try:
-                            filename = entry.get("filename") or entry.get("attachment_url").split("/")[-1]
-                        except Exception:
-                            filename = entry.get("attachment_url")
-                        embed.add_field(name="Video", value=f"{filename}", inline=False)
                     elif entry.get("attachment_url"):
                         embed.add_field(name="Attachment", value=entry.get("attachment_url"), inline=False)
 
