@@ -3,25 +3,22 @@ import discord
 from discord.ext import commands, tasks
 import tweepy
 import json
-import asyncio
 import time
 
-# Config
+# ================== Config ==================
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
-TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
-DISCORD_CHANNEL_TWITTER_ID = int(os.environ.get("DISCORD_CHANNEL_TWITTER_ID", "1439549538556973106"))
+TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")  # ex: "pirpg"
+DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1401352070505824306"))
 CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))
 POSTED_TWEETS_FILE = "posted_tweet_ids.json"
 
+# ================== Cog ==================
 class TwitterFeedListener(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.client = tweepy.Client(bearer_token=BEARER_TOKEN)
         self.user_id = None
-        self.twitter_username = TWITTER_USERNAME
         self.posted_tweet_ids = self.load_posted_tweets()
-        self.last_tweet = None
-        self.last_includes = None
         self.check_tweets.start()
 
     def cog_unload(self):
@@ -43,14 +40,11 @@ class TwitterFeedListener(commands.Cog):
         except Exception as e:
             print(f"[TwitterFeedListener] Erreur sauvegarde tweets : {e}")
 
-    def get_last_tweet_full(self):
-        return self.last_tweet, self.last_includes
-
     @tasks.loop(minutes=CHECK_INTERVAL_MINUTES)
     async def check_tweets(self):
         try:
             if self.user_id is None:
-                user = self.client.get_user(username=self.twitter_username)
+                user = self.client.get_user(username=TWITTER_USERNAME)
                 if not user or not user.data:
                     return
                 self.user_id = user.data.id
@@ -67,10 +61,12 @@ class TwitterFeedListener(commands.Cog):
             if not tweets.data:
                 return
 
-            tweet = tweets.data[0]
+            channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
+            media_dict = {m["media_key"]: m for m in tweets.includes.get("media", [])} if tweets.includes else {}
 
-            if tweet.id not in self.posted_tweet_ids:
-                channel = self.bot.get_channel(DISCORD_CHANNEL_TWITTER_ID)
+            for tweet in tweets.data:
+                if tweet.id in self.posted_tweet_ids:
+                    continue
 
                 embed = discord.Embed(
                     description=tweet.text,
@@ -78,38 +74,28 @@ class TwitterFeedListener(commands.Cog):
                     timestamp=tweet.created_at
                 )
                 embed.set_author(
-                    name=f"Twitter - @{self.twitter_username}",
-                    url=f"https://twitter.com/{self.twitter_username}/status/{tweet.id}"
+                    name=f"Twitter - @{TWITTER_USERNAME}",
+                    url=f"https://twitter.com/{TWITTER_USERNAME}/status/{tweet.id}"
                 )
 
-                urls = []
-                if tweet.entities and "urls" in tweet.entities:
-                    urls = [u["expanded_url"] for u in tweet.entities["urls"]]
-                if urls:
-                    embed.add_field(name="Lien", value="\n".join(urls), inline=False)
-
-                await channel.send(embed=embed)
-
-                media_dict = {m["media_key"]: m for m in tweets.includes.get("media", [])} if tweets.includes else {}
+                # Ajout médias dans l'embed si image
                 if tweet.attachments and "media_keys" in tweet.attachments:
                     for key in tweet.attachments["media_keys"]:
                         media = media_dict.get(key)
                         if media:
                             url_to_show = media.get("url") or media.get("preview_image_url")
                             if url_to_show:
-                                await channel.send(embed=discord.Embed().set_image(url=url_to_show))
+                                embed.set_image(url=url_to_show)
+                                break  # juste la première image pour l'archive
 
+                # On stocke l'ID du tweet dans le message embed pour retrouver plus tard
+                embed.set_footer(text=f"Tweet ID: {tweet.id}")
+
+                await channel.send(embed=embed)
                 self.posted_tweet_ids.add(tweet.id)
-                self.save_posted_tweets()
-                self.last_tweet = tweet
-                self.last_includes = tweets.includes if tweets.includes else {}
 
-        except tweepy.TooManyRequests as e:
-            reset_timestamp = e.response.headers.get("x-rate-limit-reset")
-            wait_time = int(reset_timestamp) - int(time.time()) if reset_timestamp else 60
-            wait_time = max(wait_time, 1)
-            print(f"[TwitterFeedListener] Rate limit atteint. Pause {wait_time}s")
-            await asyncio.sleep(wait_time)
+            self.save_posted_tweets()
+
         except Exception as e:
             print(f"[TwitterFeedListener] Erreur récupération tweets : {e}")
 
