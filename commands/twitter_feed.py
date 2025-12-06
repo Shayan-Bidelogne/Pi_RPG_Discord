@@ -6,19 +6,19 @@ import json
 import asyncio
 import time
 
-# ================== CONFIG ==================
+# Config
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 DISCORD_CHANNEL_TWITTER_ID = int(os.environ.get("DISCORD_CHANNEL_TWITTER_ID", "1439549538556973106"))
 CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))
 POSTED_TWEETS_FILE = "posted_tweet_ids.json"
-# ============================================
 
 class TwitterFeedListener(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.client = tweepy.Client(bearer_token=BEARER_TOKEN)
         self.user_id = None
+        self.twitter_username = TWITTER_USERNAME
         self.posted_tweet_ids = self.load_posted_tweets()
         self.last_tweet = None
         self.last_includes = None
@@ -27,7 +27,6 @@ class TwitterFeedListener(commands.Cog):
     def cog_unload(self):
         self.check_tweets.cancel()
 
-    # ---------- Gestion persistance ----------
     def load_posted_tweets(self):
         if os.path.exists(POSTED_TWEETS_FILE):
             try:
@@ -47,12 +46,11 @@ class TwitterFeedListener(commands.Cog):
     def get_last_tweet_full(self):
         return self.last_tweet, self.last_includes
 
-    # ---------- Boucle principale ----------
     @tasks.loop(minutes=CHECK_INTERVAL_MINUTES)
     async def check_tweets(self):
         try:
             if self.user_id is None:
-                user = self.client.get_user(username=TWITTER_USERNAME)
+                user = self.client.get_user(username=self.twitter_username)
                 if not user or not user.data:
                     return
                 self.user_id = user.data.id
@@ -80,8 +78,8 @@ class TwitterFeedListener(commands.Cog):
                     timestamp=tweet.created_at
                 )
                 embed.set_author(
-                    name=f"Twitter - @{TWITTER_USERNAME}",
-                    url=f"https://twitter.com/{TWITTER_USERNAME}/status/{tweet.id}"
+                    name=f"Twitter - @{self.twitter_username}",
+                    url=f"https://twitter.com/{self.twitter_username}/status/{tweet.id}"
                 )
 
                 urls = []
@@ -120,6 +118,5 @@ class TwitterFeedListener(commands.Cog):
         await self.bot.wait_until_ready()
 
 
-# ---------- Setup Cog ----------
 async def setup(bot):
     await bot.add_cog(TwitterFeedListener(bot))

@@ -7,19 +7,14 @@ import aiohttp
 import tempfile
 import re
 
-# Import relatif pour TwitterFeedListener
-from .twitter_feed import TwitterFeedListener
-
-# ================== CONFIG ==================
-DISCORD_CHANNEL_CONFIRM_ID = int(os.environ.get("DISCORD_CHANNEL_CONFIRM_ID", "1401352070505824306"))
-
-# Reddit env
+# Config Reddit
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
 REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
+DISCORD_CHANNEL_CONFIRM_ID = int(os.environ.get("DISCORD_CHANNEL_CONFIRM_ID", "1401352070505824306"))
 
-# ================== Init Reddit ==================
+# Init Reddit
 reddit = asyncpraw.Reddit(
     client_id=REDDIT_CLIENT_ID,
     client_secret=REDDIT_CLIENT_SECRET,
@@ -28,21 +23,20 @@ reddit = asyncpraw.Reddit(
     user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
 
-# ================== Cog Reddit ==================
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @app_commands.command(name="reddit", description="Poster le dernier tweet sur Reddit avec confirmation")
     async def reddit_from_tweet(self, interaction: discord.Interaction):
-        listener: TwitterFeedListener = self.bot.get_cog("TwitterFeedListener")
+        listener = self.bot.get_cog("TwitterFeedListener")
         tweet, includes = listener.get_last_tweet_full()
 
         if not tweet:
             await interaction.response.send_message("❌ Aucun tweet disponible pour poster.", ephemeral=True)
             return
 
-        # Construire media_dict depuis includes
+        # Construire media_dict
         media_dict = {}
         if includes:
             media_list = includes.get("media", [])
@@ -55,22 +49,21 @@ class RedditPoster(commands.Cog):
                 media_info = media_dict.get(key)
                 break
 
-        # Création embed Discord
         embed = discord.Embed(
             description=tweet.text,
             color=discord.Color.orange(),
             timestamp=tweet.created_at
         )
         embed.set_author(
-            name=f"Twitter - @{listener.client.get_user(id=listener.user_id).data.username}",
-            url=f"https://twitter.com/{listener.client.get_user(id=listener.user_id).data.username}/status/{tweet.id}"
+            name=f"Twitter - @{listener.twitter_username}",
+            url=f"https://twitter.com/{listener.twitter_username}/status/{tweet.id}"
         )
         if media_info:
             url_preview = media_info.get("url") or media_info.get("preview_image_url")
             if url_preview:
                 embed.set_image(url=url_preview)
 
-        # ---------- Menu select subreddit ----------
+        # Menu select subreddit
         class SubredditSelect(ui.View):
             def __init__(self):
                 super().__init__(timeout=120)
@@ -83,9 +76,9 @@ class RedditPoster(commands.Cog):
                     discord.SelectOption(label="r/mySubreddit2", value="mySubreddit2"),
                 ]
             )
-            async def select_callback(self, select: discord.ui.Select, interaction2: discord.Interaction):
+            async def callback(self, select: ui.SelectInteraction):
                 subreddit_name = select.values[0]
-                await interaction2.response.defer()
+                await select.response.defer()
                 try:
                     subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
 
@@ -125,11 +118,11 @@ class RedditPoster(commands.Cog):
                     else:
                         submission = await subreddit_obj.submit(title=tweet.text[:300], selftext=tweet.text)
 
-                    await interaction2.followup.send(
+                    await select.followup.send(
                         f"✅ Post Reddit publié : https://reddit.com{submission.permalink}", ephemeral=True
                     )
                 except Exception as e:
-                    await interaction2.followup.send(f"❌ Erreur Reddit : {e}", ephemeral=True)
+                    await select.followup.send(f"❌ Erreur Reddit : {e}", ephemeral=True)
 
         channel = self.bot.get_channel(DISCORD_CHANNEL_CONFIRM_ID)
         await channel.send(embed=embed, view=SubredditSelect())
@@ -137,6 +130,5 @@ class RedditPoster(commands.Cog):
             f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True
         )
 
-# ---------- Setup Cog ----------
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))
