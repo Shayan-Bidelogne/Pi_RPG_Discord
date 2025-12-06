@@ -8,7 +8,7 @@ import time
 
 # ================== CONFIG ==================
 BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
-TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
+TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")  # ex: "pirpg"
 DISCORD_CHANNEL_TWITTER_ID = int(os.environ.get("DISCORD_CHANNEL_TWITTER_ID", "1439549538556973106"))
 CHECK_INTERVAL_MINUTES = int(os.environ.get("CHECK_INTERVAL_MINUTES", "10"))
 POSTED_TWEETS_FILE = "posted_tweet_ids.json"

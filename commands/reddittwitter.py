@@ -6,15 +6,18 @@ import asyncpraw
 import aiohttp
 import tempfile
 import re
+from twitter_feed import TwitterFeedListener
 
-# ================== CONFIG REDDIT ==================
+# ================== CONFIG ==================
+DISCORD_CHANNEL_CONFIRM_ID = int(os.environ.get("DISCORD_CHANNEL_CONFIRM_ID", "1401352070505824306"))
+
+# Reddit env
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
 REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
-DISCORD_CHANNEL_CONFIRM_ID = int(os.environ.get("DISCORD_CHANNEL_CONFIRM_ID", "1401352070505824306"))
-# ================================================
 
+# ================== Init Reddit ==================
 reddit = asyncpraw.Reddit(
     client_id=REDDIT_CLIENT_ID,
     client_secret=REDDIT_CLIENT_SECRET,
@@ -22,6 +25,7 @@ reddit = asyncpraw.Reddit(
     password=REDDIT_PASSWORD,
     user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
+# ============================================
 
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
@@ -29,17 +33,18 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster le dernier tweet sur Reddit avec confirmation")
     async def reddit_from_tweet(self, interaction: discord.Interaction):
-        listener = self.bot.get_cog("TwitterFeedListener")
+        listener: TwitterFeedListener = self.bot.get_cog("TwitterFeedListener")
         tweet, includes = listener.get_last_tweet_full()
 
         if not tweet:
-            await interaction.response.send_message("❌ Aucun tweet disponible.", ephemeral=True)
+            await interaction.response.send_message("❌ Aucun tweet disponible pour poster.", ephemeral=True)
             return
 
         # Construire media_dict depuis includes
         media_dict = {}
         if includes:
-            for m in includes.get("media", []):
+            media_list = includes.get("media", [])
+            for m in media_list:
                 media_dict[m["media_key"]] = m
 
         media_info = None
@@ -48,22 +53,22 @@ class RedditPoster(commands.Cog):
                 media_info = media_dict.get(key)
                 break
 
-        # Embed de confirmation
+        # Création de l'embed Discord
         embed = discord.Embed(
             description=tweet.text,
             color=discord.Color.orange(),
             timestamp=tweet.created_at
         )
         embed.set_author(
-            name=f"Twitter - @{listener.bot.TWITTER_USERNAME}",
-            url=f"https://twitter.com/{listener.bot.TWITTER_USERNAME}/status/{tweet.id}"
+            name=f"Twitter - @{tweet.author.username if hasattr(tweet, 'author') else 'pirpg'}",
+            url=f"https://twitter.com/{os.getenv('TWITTER_USERNAME')}/status/{tweet.id}"
         )
         if media_info:
             url_preview = media_info.get("url") or media_info.get("preview_image_url")
             if url_preview:
                 embed.set_image(url=url_preview)
 
-        # Menu select subreddit
+        # ---------- Menu select subreddit ----------
         class SubredditSelect(ui.View):
             def __init__(self):
                 super().__init__(timeout=120)
@@ -77,11 +82,12 @@ class RedditPoster(commands.Cog):
                 ]
             )
             async def select_callback(self, select: ui.Select, interaction2: discord.Interaction):
-                subreddit_name = select.values[0]
+                subreddit_name = select.values[0]  # ✅ Correct
                 await interaction2.response.defer()
                 try:
                     subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
 
+                    # Gestion média
                     if media_info:
                         if media_info["type"] == "photo":
                             async with aiohttp.ClientSession() as session:
@@ -129,7 +135,6 @@ class RedditPoster(commands.Cog):
         await interaction.response.send_message(
             f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True
         )
-
 
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))
