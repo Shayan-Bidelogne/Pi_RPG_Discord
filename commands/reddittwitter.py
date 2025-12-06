@@ -55,47 +55,63 @@ class RedditPoster(commands.Cog):
             tweet_id = None
             media_type = None  # "image" or "video" or None
 
+            # Prefer embeds for description/media but DO NOT override attachments
             if msg.embeds:
                 emb = msg.embeds[0]
                 # text in embed description
                 if getattr(emb, "description", None):
                     text = emb.description.strip()
-                # video in embed (preferred)
-                if getattr(emb, "video", None) and getattr(emb.video, "url", None):
-                    attachment_url = emb.video.url
-                    media_type = "video"
-                # image in embed
-                if getattr(emb, "image", None) and getattr(emb.image, "url", None):
-                    image_url = emb.image.url
-                    if media_type is None:
-                        media_type = "image"
+                # embed video (keep as fallback)
+                emb_video_url = getattr(getattr(emb, "video", None), "url", None)
+                emb_image_url = getattr(getattr(emb, "image", None), "url", None)
                 # footer may contain "Tweet ID: <id>"
                 if getattr(emb, "footer", None) and getattr(emb.footer, "text", None):
                     footer = emb.footer.text
                     if footer.startswith("Tweet ID:"):
                         tweet_id = footer.split(":", 1)[1].strip()
+            else:
+                emb_video_url = None
+                emb_image_url = None
 
-            # attachments fallback (check content_type to detect video/image)
+            # Attachments: prefer real attachment URLs (these point to Discord CDN)
             if msg.attachments:
                 att = msg.attachments[0]
-                att_url = att.url
+                # try to read url/proxy_url/filename/content_type
+                att_url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
+                filename = getattr(att, "filename", None) or ""
                 ct = (getattr(att, "content_type", "") or "").lower()
-                # detect video types
-                if ct.startswith("video") or att_url.endswith((".mp4", ".mov", ".webm")):
+
+                # If att_url is missing or not an http URL, reconstruct CDN URL (safe fallback)
+                if not att_url or not str(att_url).startswith(("http://", "https://")):
+                    try:
+                        channel_id = getattr(msg.channel, "id", None)
+                        message_id = getattr(msg, "id", None)
+                        if channel_id and message_id and filename:
+                            att_url = f"https://cdn.discordapp.com/attachments/{channel_id}/{message_id}/{filename}"
+                    except Exception:
+                        pass
+
+                if att_url:
                     attachment_url = att_url
-                    media_type = "video"
-                elif ct.startswith("image") or att_url.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                    # prefer image_url if not already video
-                    if media_type != "video":
+                    # detect video types from content_type or filename
+                    if ct.startswith("video") or attachment_url.lower().endswith((".mp4", ".mov", ".webm")):
+                        media_type = "video"
+                    elif ct.startswith("image") or attachment_url.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+                        # prefer image unless a video was already detected from embed
+                        media_type = media_type or "image"
                         image_url = att_url
-                        media_type = "image"
                     else:
-                        # keep attachment_url as video
-                        attachment_url = att_url
-                else:
-                    # unknown attachment: keep as attachment_url
-                    if not attachment_url:
-                        attachment_url = att_url
+                        # unknown attachment type: keep as attachment_url
+                        media_type = media_type or None
+
+            # If no attachment found, fallback to embed urls (video preferred)
+            if not attachment_url:
+                if emb_video_url:
+                    attachment_url = emb_video_url
+                    media_type = "video"
+                elif emb_image_url:
+                    image_url = emb_image_url
+                    media_type = media_type or "image"
 
             return {
                 "text": text or "",
