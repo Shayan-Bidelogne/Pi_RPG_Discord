@@ -20,11 +20,11 @@ reddit = asyncpraw.Reddit(
     user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
 
-@app_commands.command(name="reddit", description="Poster sur Reddit un message texte, une image ou une vidéo")
+@app_commands.command(name="reddit", description="Poster sur Reddit texte, image ou vidéo")
 @app_commands.describe(
-    title="Titre du post",
-    subreddit="Nom du subreddit (sans /r/)",
-    message="Contenu texte du post (optionnel)",
+    title="Titre du post Reddit",
+    subreddit="Nom du subreddit sans /r/",
+    message="Texte du post (optionnel)",
     media="Image ou vidéo (optionnel)"
 )
 async def reddit_command(
@@ -32,30 +32,27 @@ async def reddit_command(
     title: str,
     subreddit: str,
     message: Optional[str] = None,
-    media: Optional[discord.Attachment] = None,
+    media: Optional[discord.Attachment] = None
 ):
-
     await interaction.response.defer(thinking=True)
 
     try:
         sub = await reddit.subreddit(subreddit, fetch=True)
 
-        # --- Cas média (image ou vidéo) ---
         if media:
             file_path = f"/tmp/{interaction.id}_{media.filename}"
             await media.save(file_path)
 
-            is_video = media.content_type.startswith("video")
-
-            if is_video:
-                # Upload vidéo Reddit via submit()
-                submission = await sub.submit(
+            if media.content_type.startswith("video"):
+                # --- UPLOAD VIDÉO ---
+                submission = await sub.submit_video(
                     title=title,
-                    selftext=message or "",
-                    video_file=file_path,
+                    video_path=file_path,
+                    selftext=message or ""
                 )
+
             else:
-                # Upload image Reddit
+                # --- UPLOAD IMAGE ---
                 submission = await sub.submit_image(
                     title=title,
                     image_path=file_path
@@ -63,19 +60,23 @@ async def reddit_command(
 
             os.remove(file_path)
 
-        # --- Cas texte seul ---
         elif message:
-            submission = await sub.submit(title=title, selftext=message)
+            # --- TEXTE SEUL ---
+            submission = await sub.submit(
+                title=title,
+                selftext=message
+            )
 
         else:
-            await interaction.followup.send("❌ Tu dois fournir un média ou un message.")
+            await interaction.followup.send("❌ Tu dois fournir un message ou un média.")
             return
 
         await submission.load()
-        await interaction.followup.send(f"✅ Post publié : https://reddit.com{submission.permalink}")
+        await interaction.followup.send(f"✅ Posté : https://reddit.com{submission.permalink}")
 
     except Exception as e:
         await interaction.followup.send(f"❌ Erreur : `{e}`", ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     bot.tree.add_command(reddit_command)
