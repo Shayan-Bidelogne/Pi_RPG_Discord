@@ -63,9 +63,6 @@ async def on_ready():
         synced = await bot.tree.sync()
         print(f"🔄 {len(synced)} commandes slash synchronisées.")
 
-        await bot.load_extension("commands.autoresponseticket")
-        print("✅ TicketListener chargé.")
-
     except Exception as e:
         print(f"⚠️ Erreur lors de l'initialisation : {e}")
 
