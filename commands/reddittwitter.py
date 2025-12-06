@@ -139,6 +139,7 @@ class TwitterFeedListener(commands.Cog):
 
 
 # ------------------- Cog Reddit -------------------
+# ------------------- Cog Reddit corrigé -------------------
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -152,6 +153,27 @@ class RedditPoster(commands.Cog):
             await interaction.response.send_message("❌ Aucun tweet disponible pour poster.", ephemeral=True)
             return
 
+        # Récupérer les médias depuis l'objet tweets complet
+        tweets_obj = listener.client.get_users_tweets(
+            id=listener.user_id,
+            max_results=5,
+            tweet_fields=["attachments"],
+            expansions=["attachments.media_keys"],
+            media_fields=["url", "preview_image_url", "type", "variants"]
+        )
+        media_dict = {}
+        if hasattr(tweets_obj, "includes") and tweets_obj.includes:
+            media_list = tweets_obj.includes.get("media", [])
+            for m in media_list:
+                media_dict[m["media_key"]] = m
+
+        media_info = None
+        if tweet.attachments and "media_keys" in tweet.attachments:
+            for key in tweet.attachments["media_keys"]:
+                media_info = media_dict.get(key)
+                break  # prendre seulement le premier média pour Reddit
+
+        # Création de l'embed de confirmation
         embed = discord.Embed(
             description=tweet.text,
             color=discord.Color.orange(),
@@ -161,13 +183,6 @@ class RedditPoster(commands.Cog):
             name=f"Twitter - @{TWITTER_USERNAME}",
             url=f"https://twitter.com/{TWITTER_USERNAME}/status/{tweet.id}"
         )
-
-        media_dict = {m["media_key"]: m for m in tweet.includes.get("media", [])} if tweet.includes else {}
-        media_info = None
-        if tweet.attachments and "media_keys" in tweet.attachments:
-            for key in tweet.attachments["media_keys"]:
-                media_info = media_dict.get(key)
-                break  # prendre seulement le premier média pour Reddit
         if media_info:
             url_preview = media_info.get("url") or media_info.get("preview_image_url")
             if url_preview:
@@ -200,34 +215,42 @@ class RedditPoster(commands.Cog):
                                         tmp_file = tempfile.NamedTemporaryFile(delete=False)
                                         tmp_file.write(await resp.read())
                                         tmp_file.close()
-                                        submission = await subreddit_obj.submit_image(title=tweet.text[:300], image_path=tmp_file.name)
+                                        submission = await subreddit_obj.submit_image(
+                                            title=tweet.text[:300], image_path=tmp_file.name
+                                        )
                                         os.unlink(tmp_file.name)
                         elif media_info["type"] in ["video", "animated_gif"]:
-                            # chercher meilleur variant mp4
                             variants = media_info.get("variants", [])
-                            mp4_urls = [v["url"] for v in variants if "bitrate" in v and v["content_type"]=="video/mp4"]
+                            mp4_urls = [
+                                v["url"] for v in variants if "bitrate" in v and v["content_type"] == "video/mp4"
+                            ]
                             if mp4_urls:
-                                best_url = sorted(mp4_urls, key=lambda x: int(re.search(r"(\d+)", x).group(1) if re.search(r"(\d+)", x) else 0), reverse=True)[0]
+                                best_url = sorted(
+                                    mp4_urls,
+                                    key=lambda x: int(re.search(r"(\d+)", x).group(1) if re.search(r"(\d+)", x) else 0),
+                                    reverse=True
+                                )[0]
                                 async with aiohttp.ClientSession() as session:
                                     async with session.get(best_url) as resp:
                                         if resp.status == 200:
                                             tmp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
                                             tmp_file.write(await resp.read())
                                             tmp_file.close()
-                                            submission = await subreddit_obj.submit_video(title=tweet.text[:300], video_path=tmp_file.name)
+                                            submission = await subreddit_obj.submit_video(
+                                                title=tweet.text[:300], video_path=tmp_file.name
+                                            )
                                             os.unlink(tmp_file.name)
                     else:
                         submission = await subreddit_obj.submit(title=tweet.text[:300], selftext=tweet.text)
-                    await interaction2.followup.send(f"✅ Post Reddit publié : https://reddit.com{submission.permalink}", ephemeral=True)
+
+                    await interaction2.followup.send(
+                        f"✅ Post Reddit publié : https://reddit.com{submission.permalink}", ephemeral=True
+                    )
                 except Exception as e:
                     await interaction2.followup.send(f"❌ Erreur Reddit : {e}", ephemeral=True)
 
         channel = self.bot.get_channel(DISCORD_CHANNEL_CONFIRM_ID)
         await channel.send(embed=embed, view=SubredditSelect())
-        await interaction.response.send_message(f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True)
-
-
-# ------------------- Setup -------------------
-async def setup(bot):
-    await bot.add_cog(TwitterFeedListener(bot))
-    await bot.add_cog(RedditPoster(bot))
+        await interaction.response.send_message(
+            f"✅ Tweet préparé pour Reddit dans <#{DISCORD_CHANNEL_CONFIRM_ID}>", ephemeral=True
+        )
