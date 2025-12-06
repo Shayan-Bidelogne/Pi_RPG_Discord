@@ -1,10 +1,15 @@
 import os
+import shutil
+import json
+import tempfile
+import asyncio
+import subprocess
+
 import discord
 from discord import app_commands, ui
 from discord.ext import commands
 import asyncpraw
 import aiohttp
-import tempfile
 
 # ================== Config ==================
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
@@ -25,17 +30,106 @@ reddit = asyncpraw.Reddit(
     user_agent=f"discord:mybot:v1.0 (by u/{REDDIT_USERNAME})",
 )
 
+# ================== Helpers ==================
+IMAGE_CT_EXT = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+def _ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+async def download_media_to_temp(url: str, session: aiohttp.ClientSession):
+    """
+    Download URL, return (file_path, content_type) or (None, None) on failure.
+    If content_type is a non-mp4 video and ffmpeg available, transcode to mp4.
+    """
+    try:
+        async with session.get(url, timeout=60) as resp:
+            if resp.status != 200:
+                return None, None
+            content_type = (resp.headers.get("Content-Type") or "").lower()
+            data = await resp.read()
+    except Exception:
+        return None, None
+
+    # Image
+    if content_type.startswith("image") or any(url.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+        ext = IMAGE_CT_EXT.get(content_type)
+        if not ext:
+            # infer from URL
+            for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                if url.lower().endswith(e):
+                    ext = e
+                    break
+        if not ext:
+            ext = ".jpg"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+        tmp.write(data)
+        tmp.close()
+        return tmp.name, content_type or "image/jpeg"
+
+    # Video
+    if content_type.startswith("video") or any(url.lower().endswith(ext) for ext in (".mp4", ".mov", ".webm")):
+        # If MP4 already
+        if "mp4" in content_type or url.lower().endswith(".mp4"):
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            tmp.write(data)
+            tmp.close()
+            return tmp.name, "video/mp4"
+        # If ffmpeg available, transcode input to mp4
+        if _ffmpeg_available():
+            in_tmp = tempfile.NamedTemporaryFile(delete=False)
+            in_tmp.write(data)
+            in_tmp.close()
+            out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            out_tmp.close()
+            loop = asyncio.get_running_loop()
+
+            def _run_ffmpeg(inp, out):
+                # use -y to overwrite, copy audio/video if possible, fallback to libx264/aac
+                cmd = [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-i", inp,
+                    "-c:v", "libx264", "-c:a", "aac", "-strict", "-2",
+                    "-movflags", "+faststart",
+                    out
+                ]
+                return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            proc = await loop.run_in_executor(None, _run_ffmpeg, in_tmp.name, out_tmp.name)
+            # cleanup input
+            try:
+                os.unlink(in_tmp.name)
+            except Exception:
+                pass
+            if proc.returncode == 0:
+                return out_tmp.name, "video/mp4"
+            else:
+                try:
+                    os.unlink(out_tmp.name)
+                except Exception:
+                    pass
+                return None, None
+        # no ffmpeg: cannot safely transcode
+        return None, None
+
+    # Unknown type: fail
+    return None, None
+
 # ================== Cog ==================
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     def clean_label(self, text: str) -> str:
-        """Nettoie et tronque à 100 caractères"""
         clean = text.replace("\n", " ").strip()
         return clean[:97] + "..." if len(clean) > 100 else clean
 
-    @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
+    @app_commands.command(name="reddit", description="Post a tweet from the library to Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
         channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
         if not channel:
@@ -47,7 +141,7 @@ class RedditPoster(commands.Cog):
             await interaction.response.send_message("❌ No tweets in the library.", ephemeral=True)
             return
 
-        # helper to extract text/media/tweet_id from a message (supports embed.video, embed.image & attachments)
+        # Extract combined data (works with embeds created by twitter_feed.py or raw attachments)
         def extract_message_data(msg):
             text = (msg.content or "").strip()
             image_url = None
@@ -57,43 +151,34 @@ class RedditPoster(commands.Cog):
 
             if msg.embeds:
                 emb = msg.embeds[0]
-                # text in embed description
                 if getattr(emb, "description", None):
                     text = emb.description.strip()
-                # video in embed (preferred)
                 if getattr(emb, "video", None) and getattr(emb.video, "url", None):
                     attachment_url = emb.video.url
                     media_type = "video"
-                # image in embed
                 if getattr(emb, "image", None) and getattr(emb.image, "url", None):
                     image_url = emb.image.url
                     if media_type is None:
                         media_type = "image"
-                # footer may contain "Tweet ID: <id>"
                 if getattr(emb, "footer", None) and getattr(emb.footer, "text", None):
                     footer = emb.footer.text
                     if footer.startswith("Tweet ID:"):
                         tweet_id = footer.split(":", 1)[1].strip()
 
-            # attachments fallback (check content_type to detect video/image)
             if msg.attachments:
                 att = msg.attachments[0]
                 att_url = att.url
                 ct = (getattr(att, "content_type", "") or "").lower()
-                # detect video types
                 if ct.startswith("video") or att_url.endswith((".mp4", ".mov", ".webm")):
                     attachment_url = att_url
                     media_type = "video"
                 elif ct.startswith("image") or att_url.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                    # prefer image_url if not already video
                     if media_type != "video":
                         image_url = att_url
                         media_type = "image"
                     else:
-                        # keep attachment_url as video
                         attachment_url = att_url
                 else:
-                    # unknown attachment: keep as attachment_url
                     if not attachment_url:
                         attachment_url = att_url
 
@@ -106,7 +191,7 @@ class RedditPoster(commands.Cog):
                 "message": msg,
             }
 
-        # Group messages by tweet_id when available so text+media are merged into single entry
+        # Group by tweet_id (embed footer must contain "Tweet ID: <id>" for grouping)
         grouped = {}
         order = []
         for msg in messages:
@@ -124,25 +209,20 @@ class RedditPoster(commands.Cog):
                 order.append(key)
             else:
                 g = grouped[key]
-                # prefer longer/more complete text
                 if not g["text"] and data["text"]:
                     g["text"] = data["text"]
                 # prefer video over image
                 if data["media_type"] == "video":
                     g["attachment_url"] = data["attachment_url"]
                     g["media_type"] = "video"
-                    # clear image_url if it was only a thumbnail
-                    g["image_url"] = g["image_url"] if g["image_url"] and not g["media_type"] else g["image_url"]
                 elif data["media_type"] == "image" and not g["image_url"]:
                     g["image_url"] = data["image_url"]
                     if not g["media_type"]:
                         g["media_type"] = "image"
-                # keep any attachment url if missing
                 if not g["attachment_url"] and data["attachment_url"]:
                     g["attachment_url"] = data["attachment_url"]
                 g["messages"].append(data["message"])
 
-        # build a list of entries preserving chronological order (newest first from history)
         entries = [grouped[k] for k in order[:25]]
 
         def make_label_from_entry(entry, idx):
@@ -160,7 +240,7 @@ class RedditPoster(commands.Cog):
             label = f"#{idx+1} — {preview}"
             return label[:100] or "[No text]"
 
-        # ---------- Modal to ask for title ----------
+        # Modal to ask title
         class TitleModal(ui.Modal):
             def __init__(self, entry, idx):
                 super().__init__(title="Enter Reddit post title")
@@ -173,7 +253,7 @@ class RedditPoster(commands.Cog):
                 title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
                 await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.entry, self.idx, title), ephemeral=True)
 
-        # ---------- Tweet selection (uses grouped entries) ----------
+        # Tweet selection
         class TweetSelect(ui.Select):
             def __init__(self, entries):
                 options = [
@@ -193,7 +273,7 @@ class RedditPoster(commands.Cog):
                 super().__init__(timeout=120)
                 self.add_item(TweetSelect(entries))
 
-        # ---------- Subreddit selection (updated to accept grouped entry) ----------
+        # Subreddit selection
         class SubredditSelect(ui.Select):
             def __init__(self, entry, idx, title):
                 options = [discord.SelectOption(label=sub, value=sub) for sub in SUBREDDITS[:25]]
@@ -210,7 +290,7 @@ class RedditPoster(commands.Cog):
                 if entry["text"]:
                     embed.add_field(name="Content", value=entry["text"][:1024], inline=False)
                 if entry["media_type"] == "video" and entry["attachment_url"]:
-                    embed.add_field(name="Video", value=entry["attachment_url"], inline=False)
+                    embed.add_field(name="Video", value="(will upload actual video)", inline=False)
                 elif entry["image_url"]:
                     embed.set_image(url=entry["image_url"])
                 elif entry["attachment_url"]:
@@ -224,7 +304,7 @@ class RedditPoster(commands.Cog):
                 super().__init__(timeout=120)
                 self.add_item(SubredditSelect(entry, idx, title))
 
-        # ---------- Confirm / Cancel (updated to use grouped entry) ----------
+        # Confirm / Cancel with robust media handling
         class ConfirmView(ui.View):
             def __init__(self, entry, idx, title, subreddit_name):
                 super().__init__(timeout=120)
@@ -236,52 +316,40 @@ class RedditPoster(commands.Cog):
             @ui.button(label="Confirm", style=discord.ButtonStyle.success)
             async def confirm(self, interaction4: discord.Interaction, button: ui.Button):
                 await interaction4.response.defer(ephemeral=True)
+                session = aiohttp.ClientSession()
+                media_tmp_path = None
                 try:
                     subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
                     submission = None
 
-                    # If we have a video URL, download and post it as video
-                    if self.entry["media_type"] == "video" and self.entry["attachment_url"]:
-                        media_url = self.entry["attachment_url"]
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(media_url) as resp:
-                                if resp.status == 200:
-                                    suffix = ".mp4" if media_url.endswith(".mp4") else None
-                                    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-                                    tmp_file.write(await resp.read())
-                                    tmp_file.close()
-                                    try:
-                                        submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=tmp_file.name)
-                                    finally:
-                                        try:
-                                            os.unlink(tmp_file.name)
-                                        except Exception:
-                                            pass
-                                else:
-                                    await interaction4.followup.send("❌ Failed to download media.", ephemeral=True)
-                                    return
-                    # If image present, submit image
-                    elif self.entry["image_url"]:
-                        media_url = self.entry["image_url"]
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(media_url) as resp:
-                                if resp.status == 200:
-                                    tmp_file = tempfile.NamedTemporaryFile(delete=False)
-                                    tmp_file.write(await resp.read())
-                                    tmp_file.close()
-                                    try:
-                                        submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=tmp_file.name)
-                                    finally:
-                                        try:
-                                            os.unlink(tmp_file.name)
-                                        except Exception:
-                                            pass
-                                else:
-                                    await interaction4.followup.send("❌ Failed to download media.", ephemeral=True)
-                                    return
+                    # Prefer attachment_url (video) else image_url
+                    media_url = self.entry.get("attachment_url") or self.entry.get("image_url")
+                    if media_url:
+                        media_tmp_path, content_type = await download_media_to_temp(media_url, session)
+                        if not media_tmp_path:
+                            # if download/transcode failed, abort (no external links)
+                            await interaction4.followup.send("❌ Cannot download or transcode media (ffmpeg required for some videos). Post aborted.", ephemeral=True)
+                            return
+
+                        # Decide how to post based on file suffix / content_type
+                        lower = media_tmp_path.lower()
+                        if lower.endswith(".mp4") or (content_type and content_type.startswith("video")):
+                            # submit as video
+                            try:
+                                submission = await subreddit_obj.submit_video(title=self.title[:300], video_path=media_tmp_path)
+                            except Exception as e:
+                                await interaction4.followup.send(f"❌ Video upload failed — post aborted. ({e})", ephemeral=True)
+                                return
+                        else:
+                            # assume image
+                            try:
+                                submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=media_tmp_path)
+                            except Exception as e:
+                                await interaction4.followup.send(f"❌ Image upload failed — post aborted. ({e})", ephemeral=True)
+                                return
                     else:
-                        # text post
-                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.entry["text"] or ""))
+                        # text-only post
+                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=(self.entry.get("text") or ""))
 
                     if submission is not None:
                         try:
@@ -295,13 +363,19 @@ class RedditPoster(commands.Cog):
                         await interaction4.followup.send("❌ Unable to obtain submission object.", ephemeral=True)
                 except Exception as e:
                     await interaction4.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
+                finally:
+                    try:
+                        if media_tmp_path and os.path.exists(media_tmp_path):
+                            os.unlink(media_tmp_path)
+                    except Exception:
+                        pass
+                    await session.close()
 
             @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
             async def cancel(self, interaction4: discord.Interaction, button: ui.Button):
                 await interaction4.response.send_message("Cancelled.", ephemeral=True)
 
         await interaction.response.send_message("📚 Select a tweet from the library:", view=TweetView(entries), ephemeral=True)
-
 
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))
