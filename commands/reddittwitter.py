@@ -7,6 +7,8 @@ import aiohttp
 import tempfile
 import re
 
+from commands.twitter_feed import TwitterFeedListener  # Import Cog Twitter
+
 # ================== Config Reddit ==================
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
@@ -29,156 +31,121 @@ class RedditPoster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ---------- Fonction utilitaire pour nettoyer/tronquer le label ----------
-    def clean_label(self, text: str, max_length: int = 100) -> str:
-        clean = ' '.join(text.split())  # supprime sauts de ligne et espaces multiples
-        if not clean:
-            clean = "Tweet sans contenu"
-        return clean[:max_length]
+    # Fonction pour tronquer/normaliser les labels (Discord max 100 chars)
+    def clean_label(self, text: str) -> str:
+        clean = text.replace("\n", " ").strip()
+        return clean[:97] + "..." if len(clean) > 100 else clean
 
-    # ---------- Commande reddit depuis bibliothèque ----------
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
-        # Récupérer les messages du channel bibliothèque
-        channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
-        if not channel:
+        library_channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
+        if not library_channel:
             await interaction.response.send_message("❌ Channel bibliothèque introuvable.", ephemeral=True)
             return
 
-        # async pour récupérer les messages
-        messages = [msg async for msg in channel.history(limit=25)]
+        # Récupérer les 50 derniers messages du channel
+        messages = [msg async for msg in library_channel.history(limit=50)]
         if not messages:
-            await interaction.response.send_message("❌ Aucune entrée dans la bibliothèque.", ephemeral=True)
+            await interaction.response.send_message("❌ Aucun tweet dans la bibliothèque.", ephemeral=True)
             return
 
         # ---------- View pour sélection du tweet ----------
         class TweetSelect(ui.View):
-            def __init__(self):
+            def __init__(self, messages, clean_label_func):
                 super().__init__(timeout=120)
+                self.messages = messages
+                self.clean_label_func = clean_label_func
 
                 options = [
                     discord.SelectOption(
-                        label=self.parent.clean_label(msg.content),
+                        label=clean_label_func(msg.content),
                         value=str(i)
                     )
                     for i, msg in enumerate(messages)
                 ]
 
-                self.add_item(
-                    ui.Select(
-                        placeholder="Choisis un tweet...",
-                        options=options,
-                        custom_id="tweet_select",
-                        min_values=1,
-                        max_values=1
-                    )
+                self.select = ui.Select(
+                    placeholder="Choisis un tweet...",
+                    options=options,
+                    custom_id="tweet_select",
+                    min_values=1,
+                    max_values=1
                 )
-                self.add_item_callback(self.children[0])
+                self.add_item(self.select)
+                self.select.callback = self.select_callback
 
-            def add_item_callback(self, select):
-                select.callback = self.select_callback
+            async def select_callback(self, interaction2: discord.Interaction):
+                idx = int(self.select.values[0])
+                msg = self.messages[idx]
 
-            async def select_callback(self, select_interaction: discord.Interaction):
-                values = select_interaction.data.get("values", [])
-                if not values:
-                    await select_interaction.response.send_message("❌ Pas de tweet sélectionné.", ephemeral=True)
-                    return
+                # Construire media_info si attachments
+                media_info = None
+                if msg.attachments:
+                    att = msg.attachments[0]
+                    media_info = {
+                        "url": att.url,
+                        "type": "photo" if att.content_type.startswith("image") else "video"
+                    }
 
-                index = int(values[0])
-                tweet_msg = messages[index]
-
-                # Construire l'embed pour confirmation
+                # Embedding du tweet
                 embed = discord.Embed(
-                    description=tweet_msg.content,
-                    color=discord.Color.orange(),
-                    timestamp=tweet_msg.created_at
+                    description=msg.content,
+                    color=discord.Color.orange()
                 )
-                if tweet_msg.attachments:
-                    att = tweet_msg.attachments[0]
-                    if att.url.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-                        embed.set_image(url=att.url)
-                    elif att.url.lower().endswith((".mp4", ".mov")):
-                        embed.add_field(name="Vidéo jointe", value=att.url)
-
-                # ---------- View pour choix du subreddit ----------
-                class SubredditSelect(ui.View):
-                    def __init__(self):
-                        super().__init__(timeout=120)
-                        self.add_item(
-                            ui.Select(
-                                placeholder="Choisis le subreddit...",
-                                options=[
-                                    discord.SelectOption(label="r/test", value="test"),
-                                    discord.SelectOption(label="r/mySubreddit1", value="mySubreddit1"),
-                                    discord.SelectOption(label="r/mySubreddit2", value="mySubreddit2"),
-                                ],
-                                custom_id="subreddit_select",
-                                min_values=1,
-                                max_values=1
-                            )
-                        )
-                        self.add_item_callback(self.children[0])
-
-                    def add_item_callback(self, select):
-                        select.callback = self.select_subreddit
-
-                    async def select_subreddit(self, subreddit_interaction: discord.Interaction):
-                        values = subreddit_interaction.data.get("values", [])
-                        subreddit_name = values[0] if values else None
-                        if not subreddit_name:
-                            await subreddit_interaction.response.send_message("❌ Pas de subreddit sélectionné.", ephemeral=True)
-                            return
-
-                        await subreddit_interaction.response.defer()
-                        try:
-                            subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-
-                            # Gestion média
-                            if tweet_msg.attachments:
-                                att = tweet_msg.attachments[0]
-                                async with aiohttp.ClientSession() as session:
-                                    async with session.get(att.url) as resp:
-                                        if resp.status == 200:
-                                            tmp_file = tempfile.NamedTemporaryFile(delete=False)
-                                            tmp_file.write(await resp.read())
-                                            tmp_file.close()
-
-                                            if att.url.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-                                                submission = await subreddit_obj.submit_image(
-                                                    title=tweet_msg.content[:300],
-                                                    image_path=tmp_file.name
-                                                )
-                                            else:
-                                                submission = await subreddit_obj.submit_video(
-                                                    title=tweet_msg.content[:300],
-                                                    video_path=tmp_file.name
-                                                )
-                                            os.unlink(tmp_file.name)
-                            else:
-                                submission = await subreddit_obj.submit(
-                                    title=tweet_msg.content[:300],
-                                    selftext=tweet_msg.content
-                                )
-
-                            await subreddit_interaction.followup.send(
-                                f"✅ Post Reddit publié : https://reddit.com{submission.permalink}",
-                                ephemeral=True
-                            )
-                        except Exception as e:
-                            await subreddit_interaction.followup.send(f"❌ Erreur Reddit : {e}", ephemeral=True)
-
-                await select_interaction.response.send_message(
-                    "📌 Tweet sélectionné ! Choisis le subreddit :", view=SubredditSelect(), ephemeral=True
+                embed.set_author(
+                    name=f"Twitter - @{os.environ.get('TWITTER_USERNAME')}",
+                    url=f"https://twitter.com/{os.environ.get('TWITTER_USERNAME')}/status/{msg.id}"
                 )
+                if media_info and media_info["type"] == "photo":
+                    embed.set_image(url=media_info["url"])
 
-        # Envoyer la sélection des tweets
-        view = TweetSelect()
-        view.parent = self  # pour accéder à clean_label
+                await interaction2.response.defer()
+
+                try:
+                    subreddit_name = "test"  # ou ajouter un menu pour choisir subreddit
+                    subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
+
+                    # Poster média si présent
+                    if media_info:
+                        if media_info["type"] == "photo":
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(media_info["url"]) as resp:
+                                    if resp.status == 200:
+                                        tmp_file = tempfile.NamedTemporaryFile(delete=False)
+                                        tmp_file.write(await resp.read())
+                                        tmp_file.close()
+                                        submission = await subreddit_obj.submit_image(
+                                            title=msg.content[:300],
+                                            image_path=tmp_file.name
+                                        )
+                                        os.unlink(tmp_file.name)
+                        elif media_info["type"] == "video":
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(media_info["url"]) as resp:
+                                    if resp.status == 200:
+                                        tmp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                                        tmp_file.write(await resp.read())
+                                        tmp_file.close()
+                                        submission = await subreddit_obj.submit_video(
+                                            title=msg.content[:300],
+                                            video_path=tmp_file.name
+                                        )
+                                        os.unlink(tmp_file.name)
+                    else:
+                        submission = await subreddit_obj.submit(title=msg.content[:300], selftext=msg.content)
+
+                    await interaction2.followup.send(
+                        f"✅ Post Reddit publié : https://reddit.com{submission.permalink}",
+                        ephemeral=True
+                    )
+                except Exception as e:
+                    await interaction2.followup.send(f"❌ Erreur Reddit : {e}", ephemeral=True)
+
+        view = TweetSelect(messages, clean_label_func=self.clean_label)
         await interaction.response.send_message(
             "📚 Sélectionne un tweet dans la bibliothèque :", view=view, ephemeral=True
         )
 
 
-# ---------- Setup Cog ----------
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))
