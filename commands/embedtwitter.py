@@ -12,7 +12,7 @@ class PubEmbed(commands.Cog):
 
         # Crée l'embed
         embed = discord.Embed(
-            title="## Pi RPG — Adventure, Craft & Earn!",
+            title="Pi RPG — Adventure, Craft & Earn!",
             description="🌋 Explore dangerous maps, face epic bosses & master crafting!\n💰 Play-to-Earn via **Pi Network** — earn rewards while playing!\n### 👉 https://discord.gg/mexYcAFEc9",
             color=0xFFA500  # Orange
         )
