@@ -217,8 +217,13 @@ class RedditPoster(commands.Cog):
             async def callback(self, interaction: discord.Interaction):
                 subreddit_name = self.values[0]
                 subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-                # Si flair obligatoire et non fourni, forcer sélection
-                if getattr(subreddit_obj, "link_flair_required", False):
+                # Vérifie si flair obligatoire
+                link_flair_required = getattr(subreddit_obj, "link_flair_required", False)
+                flairs = await subreddit_obj.flair.link_templates()
+                if link_flair_required and not flairs:
+                    await interaction.response.send_message("❌ Flair required but no flairs available.", ephemeral=True)
+                    return
+                if link_flair_required:
                     view = FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name)
                     await interaction.response.send_message("Subreddit requires flair. Please select one:", view=view, ephemeral=True)
                     return
@@ -291,7 +296,8 @@ class RedditPoster(commands.Cog):
                             return
                         submission = await subreddit_obj.submit(title=title[:300], selftext=text, flair_id=flair_id)
                 except asyncpraw.exceptions.RedditAPIException as e:
-                    await interaction.followup.send(f"❌ Reddit API error: {e}", ephemeral=True)
+                    try: await interaction.followup.send(f"❌ Reddit API error: {e}", ephemeral=True)
+                    except discord.NotFound: pass
                     return
                 if submission:
                     await submission.load()
