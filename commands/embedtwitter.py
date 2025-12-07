@@ -6,7 +6,7 @@ class PubEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="Ad", description="Publier un embed de pub préconfiguré")
+    @app_commands.command(name="ad", description="Publier un embed de pub préconfiguré")
     async def pubembed(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
