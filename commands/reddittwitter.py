@@ -15,9 +15,9 @@ REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
 DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1439549538556973106"))
 
-SUBREDDITS = ["test", "indiegames", "mySubreddit2"]
+SUBREDDITS = ["test", "indiegames", "indiedev", "indiegaming"]
 
-# Si tu veux, tu peux définir les flairs par subreddit ici :
+# Flairs par subreddit (utiliser "void" si pas de flair)
 SUBREDDIT_FLAIRS = {
     "test": [
         {"id": "flair1_id", "text": "Flair 1"},
@@ -26,6 +26,13 @@ SUBREDDIT_FLAIRS = {
     "indiegames": [
         {"id": "dc3fecc0-73fe-11ef-98f9-96f71f8c9125", "text": "Promotion"},
         {"id": "flairB_id", "text": "Art"},
+    ],
+    "indiedev": [
+        {"id": "8381172a-c135-11e4-bf76-22000b258857", "text": "New Game!"},
+        {"id": "66bb8e68-fb1d-11e5-b3b0-0e8e919f5adb", "text": "Screenshot"},
+    ],
+    "indiegaming": [
+        {"id": "void", "text": "No Flair"},
     ],
 }
 
@@ -104,6 +111,7 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
+        # Vérification rôle
         required_role_name = "1"
         member = interaction.user
         roles = getattr(member, "roles", []) or []
@@ -231,13 +239,14 @@ class RedditPoster(commands.Cog):
             async def callback(self, interaction: discord.Interaction):
                 subreddit_name = self.values[0]
                 subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-                # Utilisation des flairs codés dans SUBREDDIT_FLAIRS
                 flairs = SUBREDDIT_FLAIRS.get(subreddit_name, [])
-                if flairs:
+
+                # Si pas de flair ou uniquement "void", on passe à la preview
+                if not flairs or all(f["id"] == "void" for f in flairs):
+                    await post_preview(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
+                else:
                     view = FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name, flairs)
                     await interaction.response.send_message("Select a flair:", view=view, ephemeral=True)
-                else:
-                    await post_preview(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
 
         class SubredditView(ui.View):
             def __init__(self, entry, idx, title):
@@ -254,7 +263,7 @@ class RedditPoster(commands.Cog):
                 super().__init__(placeholder="Choose a flair", options=options, min_values=1, max_values=1)
 
             async def callback(self, interaction: discord.Interaction):
-                flair_id = self.values[0] if self.values else None
+                flair_id = self.values[0] if self.values and self.values[0] != "void" else None
                 await post_preview(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id)
 
         class FlairSelectView(ui.View):
