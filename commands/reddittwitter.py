@@ -17,13 +17,6 @@ DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1
 
 SUBREDDITS = ["test", "indiegames", "mySubreddit2"]
 
-# Exemple : dictionnaire des flairs par subreddit
-SUBREDDIT_FLAIRS = {
-    "test": ["Flair1", "Flair2"],
-    "indiegames": ["Devlog", "Video", "Promotion"],
-    "mySubreddit2": ["News", "Discussion"],
-}
-
 # ================== Reddit init ==================
 reddit = asyncpraw.Reddit(
     client_id=REDDIT_CLIENT_ID,
@@ -221,12 +214,19 @@ class RedditPoster(commands.Cog):
                 self.entry = entry
                 self.idx = idx
                 self.title = title
+
             async def callback(self, interaction: discord.Interaction):
                 subreddit_name = self.values[0]
                 subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-                # Affiche le menu de flair basé sur le dictionnaire
-                flairs = SUBREDDIT_FLAIRS.get(subreddit_name, [])
-                await interaction.response.send_message("Select a flair for this post:", view=FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name, flairs), ephemeral=True)
+                # Récupération automatique des flairs
+                flairs = await subreddit_obj.flair.link_templates()
+                self.bot_flairs = {f["id"]: f.get("text","No text") for f in flairs}
+                # Si flair obligatoire
+                if getattr(subreddit_obj, "link_flair_required", False) and flairs:
+                    await interaction.response.send_message("Subreddit requires flair. Please select one:", view=FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name, self.bot_flairs), ephemeral=True)
+                else:
+                    # Aucun flair requis
+                    await post_to_reddit(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
 
         class SubredditView(ui.View):
             def __init__(self, entry, idx, title):
@@ -235,22 +235,43 @@ class RedditPoster(commands.Cog):
 
         # ------------------ Select flair ------------------
         class FlairSelect(ui.Select):
-            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flairs):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flair_map):
                 self.entry, self.idx, self.title = entry, idx, title
                 self.subreddit_obj, self.subreddit_name = subreddit_obj, subreddit_name
-                options = [discord.SelectOption(label=f, value=f) for f in flairs] if flairs else []
-                super().__init__(placeholder="Choose a flair" if options else "No flairs available",
-                                 options=options,
-                                 min_values=1 if options else 0,
-                                 max_values=1 if options else 0)
+                self.flair_map = flair_map
+                options = [discord.SelectOption(label=text, value=fid) for fid, text in flair_map.items()]
+                super().__init__(placeholder="Choose a flair", options=options, min_values=1, max_values=1)
+
             async def callback(self, interaction: discord.Interaction):
-                flair = self.values[0] if self.values else None
-                await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id=flair)
+                flair_id = self.values[0] if self.values else None
+                flair_text = self.flair_map.get(flair_id)
+                await interaction.response.send_message(f"✅ Flair selected: {flair_text}", ephemeral=True)
+                # Confirmation avant envoi
+                await interaction.followup.send("Confirm post?", view=ConfirmView(self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id), ephemeral=True)
 
         class FlairSelectView(ui.View):
-            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flairs):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flair_map):
                 super().__init__(timeout=120)
-                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name, flairs))
+                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name, flair_map))
+
+        # ------------------ Confirmation ------------------
+        class ConfirmButton(ui.Button):
+            def __init__(self, entry, title, subreddit_obj, subreddit_name, flair_id):
+                super().__init__(label="Confirm Post", style=discord.ButtonStyle.green)
+                self.entry, self.title = entry, title
+                self.subreddit_obj, self.subreddit_name = subreddit_obj, subreddit_name
+                self.flair_id = flair_id
+
+            async def callback(self, interaction: discord.Interaction):
+                await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, self.flair_id)
+                for child in self.view.children:
+                    child.disabled = True
+                await interaction.message.edit(view=self.view)
+
+        class ConfirmView(ui.View):
+            def __init__(self, entry, title, subreddit_obj, subreddit_name, flair_id):
+                super().__init__(timeout=120)
+                self.add_item(ConfirmButton(entry, title, subreddit_obj, subreddit_name, flair_id))
 
         # ------------------ Poster sur Reddit ------------------
         async def post_to_reddit(interaction, entry, title, subreddit_obj, subreddit_name, flair_id=None):
