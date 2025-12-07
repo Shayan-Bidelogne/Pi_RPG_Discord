@@ -17,6 +17,18 @@ DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1
 
 SUBREDDITS = ["test", "indiegames", "mySubreddit2"]
 
+# Si tu veux, tu peux définir les flairs par subreddit ici :
+SUBREDDIT_FLAIRS = {
+    "test": [
+        {"id": "flair1_id", "text": "Flair 1"},
+        {"id": "flair2_id", "text": "Flair 2"},
+    ],
+    "indiegames": [
+        {"id": "dc3fecc0-73fe-11ef-98f9-96f71f8c9125", "text": "Promotion"},
+        {"id": "flairB_id", "text": "Art"},
+    ],
+}
+
 # ================== Reddit init ==================
 reddit = asyncpraw.Reddit(
     client_id=REDDIT_CLIENT_ID,
@@ -80,6 +92,7 @@ async def download_image(url: str, filename_hint: str = "") -> str:
         ext = ".jpg"
     return await _save_bytes(data, ext)
 
+
 # ================== Cog ==================
 class RedditPoster(commands.Cog):
     def __init__(self, bot):
@@ -91,7 +104,6 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
-        # Vérification rôle
         required_role_name = "1"
         member = interaction.user
         roles = getattr(member, "roles", []) or []
@@ -202,6 +214,7 @@ class RedditPoster(commands.Cog):
                 self.idx = idx
                 self.title_input = ui.TextInput(label="Title (max 300 chars)", style=discord.TextStyle.short, max_length=300)
                 self.add_item(self.title_input)
+
             async def on_submit(self, modal_inter: discord.Interaction):
                 title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
                 await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.entry, self.idx, title), ephemeral=True)
@@ -218,15 +231,13 @@ class RedditPoster(commands.Cog):
             async def callback(self, interaction: discord.Interaction):
                 subreddit_name = self.values[0]
                 subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-                # Récupération automatique des flairs
-                flairs = await subreddit_obj.flair.link_templates()
-                self.bot_flairs = {f["id"]: f.get("text","No text") for f in flairs}
-                # Si flair obligatoire
-                if getattr(subreddit_obj, "link_flair_required", False) and flairs:
-                    await interaction.response.send_message("Subreddit requires flair. Please select one:", view=FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name, self.bot_flairs), ephemeral=True)
+                # Utilisation des flairs codés dans SUBREDDIT_FLAIRS
+                flairs = SUBREDDIT_FLAIRS.get(subreddit_name, [])
+                if flairs:
+                    view = FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name, flairs)
+                    await interaction.response.send_message("Select a flair:", view=view, ephemeral=True)
                 else:
-                    # Aucun flair requis
-                    await post_to_reddit(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
+                    await post_preview(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
 
         class SubredditView(ui.View):
             def __init__(self, entry, idx, title):
@@ -235,43 +246,45 @@ class RedditPoster(commands.Cog):
 
         # ------------------ Select flair ------------------
         class FlairSelect(ui.Select):
-            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flair_map):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flairs):
                 self.entry, self.idx, self.title = entry, idx, title
                 self.subreddit_obj, self.subreddit_name = subreddit_obj, subreddit_name
-                self.flair_map = flair_map
-                options = [discord.SelectOption(label=text, value=fid) for fid, text in flair_map.items()]
+                self.flair_map = {f["id"]: f["text"] for f in flairs}
+                options = [discord.SelectOption(label=f["text"], value=f["id"]) for f in flairs]
                 super().__init__(placeholder="Choose a flair", options=options, min_values=1, max_values=1)
 
             async def callback(self, interaction: discord.Interaction):
                 flair_id = self.values[0] if self.values else None
-                flair_text = self.flair_map.get(flair_id)
-                await interaction.response.send_message(f"✅ Flair selected: {flair_text}", ephemeral=True)
-                # Confirmation avant envoi
-                await interaction.followup.send("Confirm post?", view=ConfirmView(self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id), ephemeral=True)
+                await post_preview(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id)
 
         class FlairSelectView(ui.View):
-            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flair_map):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flairs):
                 super().__init__(timeout=120)
-                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name, flair_map))
+                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name, flairs))
 
-        # ------------------ Confirmation ------------------
-        class ConfirmButton(ui.Button):
+        # ------------------ Preview et confirmation ------------------
+        async def post_preview(interaction, entry, title, subreddit_obj, subreddit_name, flair_id=None):
+            text_preview = entry.get("text") or ""
+            embed = discord.Embed(title="Preview Reddit post", description=text_preview[:2048])
+            if entry.get("image_url"):
+                embed.set_image(url=entry["image_url"])
+            view = ConfirmPostView(entry, title, subreddit_obj, subreddit_name, flair_id)
+            await interaction.response.send_message("Preview:", embed=embed, view=view, ephemeral=True)
+
+        class ConfirmPostView(ui.View):
             def __init__(self, entry, title, subreddit_obj, subreddit_name, flair_id):
-                super().__init__(label="Confirm Post", style=discord.ButtonStyle.green)
-                self.entry, self.title = entry, title
-                self.subreddit_obj, self.subreddit_name = subreddit_obj, subreddit_name
+                super().__init__(timeout=120)
+                self.entry = entry
+                self.title = title
+                self.subreddit_obj = subreddit_obj
+                self.subreddit_name = subreddit_name
                 self.flair_id = flair_id
+                self.add_item(ui.Button(label="✅ Confirm and post", style=discord.ButtonStyle.green, custom_id="confirm_post"))
 
-            async def callback(self, interaction: discord.Interaction):
+            @ui.button(label="✅ Confirm and post", style=discord.ButtonStyle.green)
+            async def confirm_post(self, interaction: discord.Interaction, button: ui.Button):
                 await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, self.flair_id)
-                for child in self.view.children:
-                    child.disabled = True
-                await interaction.message.edit(view=self.view)
-
-        class ConfirmView(ui.View):
-            def __init__(self, entry, title, subreddit_obj, subreddit_name, flair_id):
-                super().__init__(timeout=120)
-                self.add_item(ConfirmButton(entry, title, subreddit_obj, subreddit_name, flair_id))
+                self.stop()
 
         # ------------------ Poster sur Reddit ------------------
         async def post_to_reddit(interaction, entry, title, subreddit_obj, subreddit_name, flair_id=None):
@@ -325,6 +338,7 @@ class RedditPoster(commands.Cog):
                 options = [discord.SelectOption(label=make_label(entry,i), value=entry["key"]) for i,entry in enumerate(entries)]
                 super().__init__(placeholder="Choose a tweet...", options=options, min_values=1, max_values=1)
                 self.entries = entries
+
             async def callback(self, interaction: discord.Interaction):
                 key = self.values[0]
                 entry = entry_map.get(key)
@@ -339,6 +353,7 @@ class RedditPoster(commands.Cog):
                 self.add_item(TweetSelect(entries))
 
         await interaction.followup.send("📚 Select a tweet from the library:", view=TweetView(entries), ephemeral=True)
+
 
 async def setup(bot):
     await bot.add_cog(RedditPoster(bot))
