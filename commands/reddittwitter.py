@@ -15,7 +15,7 @@ REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
 DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1439549538556973106"))
 
-SUBREDDITS = ["test", "indiesgames", "mySubreddit2"]
+SUBREDDITS = ["test", "indiegames", "mySubreddit2"]
 
 # ================== Reddit init ==================
 reddit = asyncpraw.Reddit(
