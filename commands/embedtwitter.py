@@ -6,7 +6,7 @@ class PubEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="ad", description="Publier un embed de pub préconfiguré")
+    @app_commands.command(name="ad", description="Publish a preconfigured advertisement embed")
     async def pubembed(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
@@ -31,7 +31,7 @@ class PubEmbed(commands.Cog):
                 "Shape the visual identity of Pi RPG — characters, environments, abilities, and animations.\n\n"
                 "## 📣 **Public Relations**\n"
                 "You’ll be the voice of Pi RPG: community engagement, social media planning, announcements.\n\n"
-                "## **You can apply/find more infos on our website** 👉 [Pi RPG Website](https://pirpg.netlify.app/)"
+                "## **You can apply/find more info on our website** 👉 [Pi RPG Website](https://pirpg.netlify.app/)"
             ),
             color=0xFFA500
         )
@@ -44,9 +44,9 @@ class PubEmbed(commands.Cog):
         )
         embed_recruit.timestamp = discord.utils.utcnow()
 
-        # ========= LISTE DES EMBEDS ========= #
+        # ========= EMBED LIST ========= #
         embeds_list = {
-            "pub1": ("🔥 Ad — Server Discord", embed1),
+            "pub1": ("🔥 Ad — Discord Server", embed1),
             "pub3": ("🚀 Ad — Hiring", embed_recruit),
         }
 
@@ -57,7 +57,7 @@ class PubEmbed(commands.Cog):
                     discord.SelectOption(label=name, value=key)
                     for key, (name, _) in embeds_list.items()
                 ]
-                super().__init__(placeholder="Choisis un embed à publier…", options=options)
+                super().__init__(placeholder="Select an embed to publish…", options=options)
 
             async def callback(self, select_interaction: discord.Interaction):
                 key = self.values[0]
@@ -65,7 +65,7 @@ class PubEmbed(commands.Cog):
 
                 await interaction.channel.send(embed=selected_embed)
                 await select_interaction.response.edit_message(
-                    content=f"✅ Embed **{embeds_list[key][0]}** publié dans {interaction.channel.mention} !",
+                    content=f"✅ Embed **{embeds_list[key][0]}** posted in {interaction.channel.mention}!",
                     view=None
                 )
                 self.view.stop()
@@ -76,7 +76,7 @@ class PubEmbed(commands.Cog):
                 self.add_item(EmbedSelect())
 
         await interaction.followup.send(
-            "📢 Sélectionne l'embed que tu veux publier :",
+            "📢 Choose the embed you want to publish:",
             view=EmbedView(),
             ephemeral=True
         )
