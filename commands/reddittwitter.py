@@ -217,11 +217,12 @@ class RedditPoster(commands.Cog):
             async def callback(self, interaction: discord.Interaction):
                 subreddit_name = self.values[0]
                 subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
+                # Si flair obligatoire et non fourni, forcer sélection
                 if getattr(subreddit_obj, "link_flair_required", False):
                     view = FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name)
                     await interaction.response.send_message("Subreddit requires flair. Please select one:", view=view, ephemeral=True)
-                else:
-                    await post_to_reddit(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
+                    return
+                await post_to_reddit(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
 
         class SubredditView(ui.View):
             def __init__(self, entry, idx, title):
@@ -247,7 +248,10 @@ class RedditPoster(commands.Cog):
                                  max_values=1 if options else 0)
             async def callback(self, interaction: discord.Interaction):
                 flair_id = self.values[0] if self.values else None
-                await interaction.response.send_message(f"✅ Flair selected: {self.flair_map.get(flair_id,'None')}", ephemeral=True)
+                try:
+                    await interaction.response.send_message(f"✅ Flair selected: {self.flair_map.get(flair_id,'None')}", ephemeral=True)
+                except discord.NotFound:
+                    pass
                 await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id)
 
         class FlairSelectView(ui.View):
@@ -276,19 +280,25 @@ class RedditPoster(commands.Cog):
                     tmp_path = await download_image(entry.get("image_url"), filename_hint=entry.get("filename") or "")
                     image_path = tmp_path
                 submission = None
-                if image_path:
-                    submission = await subreddit_obj.submit_image(title=title[:300], image_path=image_path, flair_id=flair_id)
-                else:
-                    text = (entry.get("text") or "").strip()
-                    if not text:
-                        await interaction.followup.send("❌ No media or text to post — aborted.", ephemeral=True)
-                        return
-                    submission = await subreddit_obj.submit(title=title[:300], selftext=text, flair_id=flair_id)
+                try:
+                    if image_path:
+                        submission = await subreddit_obj.submit_image(title=title[:300], image_path=image_path, flair_id=flair_id)
+                    else:
+                        text = (entry.get("text") or "").strip()
+                        if not text:
+                            try: await interaction.followup.send("❌ No media or text to post — aborted.", ephemeral=True)
+                            except discord.NotFound: pass
+                            return
+                        submission = await subreddit_obj.submit(title=title[:300], selftext=text, flair_id=flair_id)
+                except asyncpraw.exceptions.RedditAPIException as e:
+                    await interaction.followup.send(f"❌ Reddit API error: {e}", ephemeral=True)
+                    return
                 if submission:
                     await submission.load()
                     permalink = getattr(submission,"permalink",None)
                     post_url = f"https://reddit.com{permalink}" if permalink else f"https://reddit.com/comments/{getattr(submission,'id','')}"
-                    await interaction.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
+                    try: await interaction.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
+                    except discord.NotFound: pass
             finally:
                 if tmp_path:
                     try: os.unlink(tmp_path)
