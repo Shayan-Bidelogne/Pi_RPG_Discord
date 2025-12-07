@@ -96,20 +96,22 @@ class RedditPoster(commands.Cog):
 
     @app_commands.command(name="reddit", description="Poster un tweet depuis la bibliothèque sur Reddit")
     async def reddit_from_library(self, interaction: discord.Interaction):
-        # Require role named "1" (mention @1). Adjust name if your role is different.
+        # Require role named "1"
         required_role_name = "1"
-        member = interaction.user  # expected to be a discord.Member in guild context
+        member = interaction.user
         roles = getattr(member, "roles", []) or []
         if not any(r.name == required_role_name for r in roles):
             try:
-                await interaction.response.send_message(f"❌ Vous devez avoir le rôle @{required_role_name} pour utiliser cette commande.", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ Vous devez avoir le rôle @{required_role_name} pour utiliser cette commande.", ephemeral=True
+                )
             except Exception:
-                # if response already used, try followup
-                await interaction.followup.send(f"❌ Vous devez avoir le rôle @{required_role_name} pour utiliser cette commande.", ephemeral=True)
+                await interaction.followup.send(
+                    f"❌ Vous devez avoir le rôle @{required_role_name} pour utiliser cette commande.", ephemeral=True
+                )
             return
 
         await interaction.response.defer(ephemeral=True)
-
         channel = self.bot.get_channel(DISCORD_CHANNEL_LIBRARY_ID)
         if not channel:
             await interaction.followup.send("❌ Library channel not found.", ephemeral=True)
@@ -120,6 +122,7 @@ class RedditPoster(commands.Cog):
             await interaction.followup.send("❌ No tweets in the library.", ephemeral=True)
             return
 
+        # ------------------ extraction ------------------
         def extract_message_data(msg):
             text = (msg.content or "").strip()
             image_url = None
@@ -156,7 +159,6 @@ class RedditPoster(commands.Cog):
                         pass
 
                 if att_url:
-                    # only treat as image if content-type or filename indicates image
                     if ct.startswith("image") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
                         attachment_url = att_url
                         image_url = att_url
@@ -227,6 +229,7 @@ class RedditPoster(commands.Cog):
             label = f"#{idx+1} — {preview}"
             return label[:100]
 
+        # ------------------ Modal pour le titre ------------------
         class TitleModal(ui.Modal):
             def __init__(self, entry, idx):
                 super().__init__(title="Enter Reddit post title")
@@ -237,8 +240,11 @@ class RedditPoster(commands.Cog):
 
             async def on_submit(self, modal_inter: discord.Interaction):
                 title = self.title_input.value.strip() or f"Library post #{self.idx+1}"
-                await modal_inter.response.send_message("Choose a subreddit:", view=SubredditView(self.entry, self.idx, title), ephemeral=True)
+                await modal_inter.response.send_message(
+                    "Choose a subreddit:", view=SubredditView(self.entry, self.idx, title), ephemeral=True
+                )
 
+        # ------------------ Select subreddit ------------------
         class SubredditSelect(ui.Select):
             def __init__(self, entry, idx, title):
                 opts = [discord.SelectOption(label=s, value=s) for s in SUBREDDITS[:25]]
@@ -248,123 +254,108 @@ class RedditPoster(commands.Cog):
                 self.title = title
 
             async def callback(self, interaction3: discord.Interaction):
-                subreddit = self.values[0]
-                emb = discord.Embed(title=cog.clean_label(self.title[:100]), color=discord.Color.blurple())
-                text = (self.entry.get("text") or "").strip()
-                if text:
-                    emb.add_field(name="Content", value=text[:1024], inline=False)
-                if self.entry.get("image_url"):
-                    emb.set_image(url=self.entry.get("image_url"))
-                await interaction3.response.send_message(f"Ready to post to r/{subreddit} — confirm:", embed=emb, view=ConfirmView(self.entry, self.idx, self.title, subreddit), ephemeral=True)
+                subreddit_name = self.values[0]
+                subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
+                if getattr(subreddit_obj, "link_flair_required", False):
+                    # si flair requis
+                    view = FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name)
+                    await interaction3.response.send_message("Subreddit requires flair. Please select one:", view=view, ephemeral=True)
+                else:
+                    await post_to_reddit(interaction3, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
 
         class SubredditView(ui.View):
             def __init__(self, entry, idx, title):
                 super().__init__(timeout=120)
                 self.add_item(SubredditSelect(entry, idx, title))
 
-        class ConfirmView(ui.View):
-            def __init__(self, entry, idx, title, subreddit_name):
-                super().__init__(timeout=120)
+        # ------------------ Select flair si nécessaire ------------------
+        class FlairSelect(ui.Select):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name):
                 self.entry = entry
                 self.idx = idx
                 self.title = title
+                self.subreddit_obj = subreddit_obj
                 self.subreddit_name = subreddit_name
+                self.flair_map = {}
+                options = []
 
-            @ui.button(label="Confirm & Post", style=discord.ButtonStyle.success)
-            async def confirm(self, interaction4: discord.Interaction, button: ui.Button):
-                await interaction4.response.defer(ephemeral=True)
-                tmp_path = None
-                try:
-                    subreddit_obj = await reddit.subreddit(self.subreddit_name, fetch=True)
-                    submission = None
+                async def setup_flairs():
+                    flairs = await subreddit_obj.flair.link_templates()
+                    if not flairs:
+                        return
+                    for f in flairs:
+                        fid = f['id']
+                        text = f.get('text', 'No text')[:100]
+                        options.append(discord.SelectOption(label=text, value=fid))
+                        self.flair_map[fid] = text
 
-                    # Try attachments first (images only)
-                    image_path = None
-                    for msg in self.entry.get("messages", []):
-                        for att in getattr(msg, "attachments", []):
-                            filename = getattr(att, "filename", "") or ""
-                            ct = (getattr(att, "content_type", "") or "").lower()
-                            if ct.startswith("image") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
-                                try:
-                                    data = await att.read()
-                                except Exception:
-                                    data = None
-                                if data:
-                                    ext = None
-                                    for e in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                                        if filename.lower().endswith(e):
-                                            ext = e
-                                            break
-                                    if not ext:
-                                        ext = ".jpg"
-                                    tmp_path = await _save_bytes(data, ext)
-                                    image_path = tmp_path
-                                    break
-                        if image_path:
-                            break
+                asyncio.get_event_loop().run_until_complete(setup_flairs())
+                super().__init__(
+                    placeholder="Choose a flair" if options else "No flairs available",
+                    options=options,
+                    min_values=1 if options else 0,
+                    max_values=1 if options else 0
+                )
 
-                    # fallback to embed image url
-                    if not image_path and self.entry.get("image_url"):
-                        img_tmp = await download_image(self.entry.get("image_url"), filename_hint=self.entry.get("filename") or "")
-                        if img_tmp:
-                            image_path = img_tmp
-                            tmp_path = img_tmp
+            async def callback(self, interaction: discord.Interaction):
+                flair_id = self.values[0] if self.values else None
+                await interaction.response.send_message(f"✅ Flair selected: {self.flair_map.get(flair_id, 'None')}", ephemeral=True)
+                await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id)
 
-                    if image_path:
-                        try:
-                            submission = await subreddit_obj.submit_image(title=self.title[:300], image_path=image_path)
-                        except Exception as e:
-                            await interaction4.followup.send(f"❌ Image upload failed — post aborted. ({e})", ephemeral=True)
-                            return
-                    else:
-                        text = (self.entry.get("text") or "").strip()
-                        if not text:
-                            await interaction4.followup.send("❌ No media or text to post — aborted.", ephemeral=True)
-                            return
-                        submission = await subreddit_obj.submit(title=self.title[:300], selftext=text)
-
-                    if submission:
-                        try:
-                            await submission.load()
-                        except Exception:
-                            pass
-                        permalink = getattr(submission, "permalink", None)
-                        post_url = f"https://reddit.com{permalink}" if permalink else f"https://reddit.com/comments/{getattr(submission, 'id', '')}"
-                        await interaction4.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
-                    else:
-                        await interaction4.followup.send("❌ Unable to obtain submission object.", ephemeral=True)
-                except Exception as e:
-                    await interaction4.followup.send(f"❌ Reddit error: {e}", ephemeral=True)
-                finally:
-                    if tmp_path:
-                        try:
-                            if os.path.exists(tmp_path):
-                                os.unlink(tmp_path)
-                        except Exception:
-                            pass
-
-            @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-            async def cancel(self, interaction4: discord.Interaction, button: ui.Button):
-                await interaction4.response.send_message("Cancelled.", ephemeral=True)
-
-        class PreviewView(ui.View):
-            def __init__(self, entry_key, idx):
+        class FlairSelectView(ui.View):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name):
                 super().__init__(timeout=120)
-                self.entry_key = entry_key
-                self.idx = idx
+                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name))
 
-            @ui.button(label="Post", style=discord.ButtonStyle.success)
-            async def post(self, interaction_p: discord.Interaction, button: ui.Button):
-                entry = entry_map.get(self.entry_key)
-                if not entry:
-                    await interaction_p.response.send_message("Entry lost — try again.", ephemeral=True)
-                    return
-                await interaction_p.response.send_modal(TitleModal(entry, self.idx))
+        # ------------------ Post helper ------------------
+        async def post_to_reddit(interaction, entry, title, subreddit_obj, subreddit_name, flair_id=None):
+            tmp_path = None
+            try:
+                image_path = None
+                for msg in entry.get("messages", []):
+                    for att in getattr(msg, "attachments", []):
+                        filename = getattr(att, "filename", "") or ""
+                        ct = (getattr(att, "content_type", "") or "").lower()
+                        if ct.startswith("image") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                            data = await att.read()
+                            if data:
+                                ext = next((e for e in (".png",".jpg",".jpeg",".webp",".gif") if filename.lower().endswith(e)), ".jpg")
+                                tmp_path = await _save_bytes(data, ext)
+                                image_path = tmp_path
+                                break
+                    if image_path:
+                        break
 
-            @ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-            async def cancel(self, interaction_p: discord.Interaction, button: ui.Button):
-                await interaction_p.response.send_message("Cancelled preview.", ephemeral=True)
+                if not image_path and entry.get("image_url"):
+                    tmp_path = await download_image(entry.get("image_url"), filename_hint=entry.get("filename") or "")
+                    image_path = tmp_path
 
+                submission = None
+                if image_path:
+                    submission = await subreddit_obj.submit_image(title=title[:300], image_path=image_path, flair_id=flair_id)
+                else:
+                    text = (entry.get("text") or "").strip()
+                    if not text:
+                        await interaction.followup.send("❌ No media or text to post — aborted.", ephemeral=True)
+                        return
+                    submission = await subreddit_obj.submit(title=title[:300], selftext=text, flair_id=flair_id)
+
+                if submission:
+                    await submission.load()
+                    permalink = getattr(submission, "permalink", None)
+                    post_url = f"https://reddit.com{permalink}" if permalink else f"https://reddit.com/comments/{getattr(submission, 'id', '')}"
+                    await interaction.followup.send(f"✅ Reddit post published: {post_url}", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ Unable to obtain submission object.", ephemeral=True)
+            finally:
+                if tmp_path:
+                    try:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                    except Exception:
+                        pass
+
+        # ------------------ Select tweet ------------------
         class TweetSelect(ui.Select):
             def __init__(self, entries):
                 options = [
@@ -375,46 +366,18 @@ class RedditPoster(commands.Cog):
                 self.entries = entries
 
             async def callback(self, interaction2: discord.Interaction):
-                try:
-                    key = self.values[0]
-                    entry = entry_map.get(key)
-                    if not entry:
-                        await interaction2.response.send_message("Selected entry not found — please retry.", ephemeral=True)
-                        return
-
-                    embed = discord.Embed(title=cog.clean_label(entry.get("text")[:100]) if entry.get("text") else f"Entry", color=discord.Color.blurple())
-                    text = (entry.get("text") or "").strip()
-                    if text:
-                        embed.add_field(name="Content", value=text[:1024], inline=False)
-
-                    meta = []
-                    if entry.get("tweet_id"):
-                        meta.append(f"tweet_id: {entry.get('tweet_id')}")
-                    if entry.get("filename"):
-                        meta.append(f"filename: {entry.get('filename')}")
-                    if meta:
-                        embed.add_field(name="Meta", value=" • ".join(meta), inline=False)
-
-                    if entry.get("image_url"):
-                        embed.set_image(url=entry.get("image_url"))
-                    elif entry.get("attachment_url"):
-                        embed.add_field(name="Attachment", value=entry.get("attachment_url"), inline=False)
-
-                    embed.set_footer(text=f"Selected: {key}")
-
-                    await interaction2.response.send_message("Preview:", embed=embed, view=PreviewView(key, [i for i,e in enumerate(self.entries) if e["key"]==key][0]), ephemeral=True)
-                except Exception as e:
-                    try:
-                        await interaction2.response.send_message(f"Error preparing preview: {e}", ephemeral=True)
-                    except Exception:
-                        pass
+                key = self.values[0]
+                entry = entry_map.get(key)
+                if not entry:
+                    await interaction2.response.send_message("Entry lost — retry.", ephemeral=True)
+                    return
+                await interaction2.response.send_modal(TitleModal(entry, [i for i,e in enumerate(self.entries) if e["key"]==key][0]))
 
         class TweetView(ui.View):
             def __init__(self, entries):
                 super().__init__(timeout=120)
                 self.add_item(TweetSelect(entries))
 
-        # send selection view
         await interaction.followup.send("📚 Select a tweet from the library:", view=TweetView(entries), ephemeral=True)
 
 
