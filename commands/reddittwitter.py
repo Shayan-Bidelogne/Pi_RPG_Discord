@@ -17,6 +17,13 @@ DISCORD_CHANNEL_LIBRARY_ID = int(os.environ.get("DISCORD_CHANNEL_LIBRARY_ID", "1
 
 SUBREDDITS = ["test", "indiegames", "mySubreddit2"]
 
+# Exemple : dictionnaire des flairs par subreddit
+SUBREDDIT_FLAIRS = {
+    "test": ["Flair1", "Flair2"],
+    "indiegames": ["Devlog", "Video", "Promotion"],
+    "mySubreddit2": ["News", "Discussion"],
+}
+
 # ================== Reddit init ==================
 reddit = asyncpraw.Reddit(
     client_id=REDDIT_CLIENT_ID,
@@ -217,17 +224,9 @@ class RedditPoster(commands.Cog):
             async def callback(self, interaction: discord.Interaction):
                 subreddit_name = self.values[0]
                 subreddit_obj = await reddit.subreddit(subreddit_name, fetch=True)
-                # Vérifie si flair obligatoire
-                link_flair_required = getattr(subreddit_obj, "link_flair_required", False)
-                flairs = await subreddit_obj.flair.link_templates()
-                if link_flair_required and not flairs:
-                    await interaction.response.send_message("❌ Flair required but no flairs available.", ephemeral=True)
-                    return
-                if link_flair_required:
-                    view = FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name)
-                    await interaction.response.send_message("Subreddit requires flair. Please select one:", view=view, ephemeral=True)
-                    return
-                await post_to_reddit(interaction, self.entry, self.title, subreddit_obj, subreddit_name, flair_id=None)
+                # Affiche le menu de flair basé sur le dictionnaire
+                flairs = SUBREDDIT_FLAIRS.get(subreddit_name, [])
+                await interaction.response.send_message("Select a flair for this post:", view=FlairSelectView(self.entry, self.idx, self.title, subreddit_obj, subreddit_name, flairs), ephemeral=True)
 
         class SubredditView(ui.View):
             def __init__(self, entry, idx, title):
@@ -236,33 +235,22 @@ class RedditPoster(commands.Cog):
 
         # ------------------ Select flair ------------------
         class FlairSelect(ui.Select):
-            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flairs):
                 self.entry, self.idx, self.title = entry, idx, title
                 self.subreddit_obj, self.subreddit_name = subreddit_obj, subreddit_name
-                self.flair_map = {}
-                options = []
-                flairs = asyncio.get_event_loop().run_until_complete(subreddit_obj.flair.link_templates())
-                for f in flairs:
-                    fid = f["id"]
-                    text = f.get("text","No text")[:100]
-                    options.append(discord.SelectOption(label=text, value=fid))
-                    self.flair_map[fid] = text
+                options = [discord.SelectOption(label=f, value=f) for f in flairs] if flairs else []
                 super().__init__(placeholder="Choose a flair" if options else "No flairs available",
                                  options=options,
                                  min_values=1 if options else 0,
                                  max_values=1 if options else 0)
             async def callback(self, interaction: discord.Interaction):
-                flair_id = self.values[0] if self.values else None
-                try:
-                    await interaction.response.send_message(f"✅ Flair selected: {self.flair_map.get(flair_id,'None')}", ephemeral=True)
-                except discord.NotFound:
-                    pass
-                await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id)
+                flair = self.values[0] if self.values else None
+                await post_to_reddit(interaction, self.entry, self.title, self.subreddit_obj, self.subreddit_name, flair_id=flair)
 
         class FlairSelectView(ui.View):
-            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name):
+            def __init__(self, entry, idx, title, subreddit_obj, subreddit_name, flairs):
                 super().__init__(timeout=120)
-                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name))
+                self.add_item(FlairSelect(entry, idx, title, subreddit_obj, subreddit_name, flairs))
 
         # ------------------ Poster sur Reddit ------------------
         async def post_to_reddit(interaction, entry, title, subreddit_obj, subreddit_name, flair_id=None):
