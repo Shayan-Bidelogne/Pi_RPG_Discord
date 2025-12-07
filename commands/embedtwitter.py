@@ -13,7 +13,7 @@ class PubEmbed(commands.Cog):
         # Crée l'embed
         embed = discord.Embed(
             title="## Pi RPG — Adventure, Craft & Earn!",
-            description="🌋 Explore dangerous maps, face epic bosses & master crafting!\n💰 Play-to-Earn via **Pi Network** — earn rewards while playing!\nhttps://discord.gg/mexYcAFEc9",
+            description="🌋 Explore dangerous maps, face epic bosses & master crafting!\n💰 Play-to-Earn via **Pi Network** — earn rewards while playing!\n### 👉 https://discord.gg/mexYcAFEc9",
             color=0xFFA500  # Orange
         )
         embed.set_image(url="https://images-ext-1.discordapp.net/external/U_Hm_A20CHCO40dYHcIIXUcl_55h9EXoWrrtIW2TuvY/https/pbs.twimg.com/media/G7hculhWsAAoG2q.png?format=webp&quality=lossless&width=881&height=880")  # Remplace par ton image
