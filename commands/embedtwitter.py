@@ -20,16 +20,6 @@ class PubEmbed(commands.Cog):
         embed1.set_footer(text="Join now! 🔥", icon_url="https://media.discordapp.net/attachments/1354459544818028714/1447063656377487544/LogoPi2.png")
         embed1.timestamp = discord.utils.utcnow()
 
-        # ========= EMBED 2 ========= #
-        embed2 = discord.Embed(
-            title="🔥 Pi RPG — Pixel Hiring!",
-            description="Fight monsters, explore biomes & craft powerful gear!\n✨ Join a growing community!\n👉 https://discord.gg/mexYcAFEc9",
-            color=0xFFA500
-        )
-        embed2.set_image(url="https://pbs.twimg.com/media/G7gDNOvWwAAkNjl?format=jpg&name=large")
-        embed2.set_footer(text="Ready to play?", icon_url="https://media.discordapp.net/attachments/1354459544818028714/1447063656377487544/LogoPi2.png")
-        embed2.timestamp = discord.utils.utcnow()
-
         # ========= EMBED 3 (RECRUITMENT) ========= #
         embed_recruit = discord.Embed(
             title="🚀 Pi RPG is Recruiting! Join the Team.",
@@ -41,12 +31,12 @@ class PubEmbed(commands.Cog):
                 "Shape the visual identity of Pi RPG — characters, environments, abilities, and animations.\n\n"
                 "## 📣 **Public Relations**\n"
                 "You’ll be the voice of Pi RPG: community engagement, social media planning, announcements.\n\n"
-                "**You can apply/find more infos on our website** 👉 [Pi RPG Website](https://pirpg.netlify.app/)"
+                "## **You can apply/find more infos on our website** 👉 [Pi RPG Website](https://pirpg.netlify.app/)"
             ),
             color=0xFFA500
         )
         embed_recruit.set_image(
-            url="https://images-ext-2.discordapp.net/external/wwpNQEZeJlWgdML3DhxIGqM2tYdbpQaEuqBzGgvHKeY/https/pbs.twimg.com/media/G7hc4qkXIAA6SSC.png?format=webp&quality=lossless"
+            url="https://pbs.twimg.com/media/GwQZGjtWIAAy4yU?format=jpg&name=small"
         )
         embed_recruit.set_footer(
             text="Join the adventure!",
@@ -56,9 +46,8 @@ class PubEmbed(commands.Cog):
 
         # ========= LISTE DES EMBEDS ========= #
         embeds_list = {
-            "pub1": ("🔥 Pub — Boss Volcano", embed1),
-            "pub2": ("✨ Pub — Monster Adventure", embed2),
-            "pub3": ("🚀 Recruiting — Join the Team", embed_recruit),
+            "pub1": ("🔥 Ad — Server Discord", embed1),
+            "pub3": ("🚀 Ad — Hiring", embed_recruit),
         }
 
         # ========= SELECT MENU ========= #
