@@ -58,7 +58,7 @@ class HiringEmbed(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         embed_recruit = discord.Embed(
-            title="🚀 Pi RPG is Recruiting! Join the Team.",
+            title="🚀 Pi RPG is Hiring! Join the Team.",
             description=(
                 "_We’re expanding the Pi RPG project and opening key roles for passionate collaborators:_\n\n"
                 "## 🎮 **Godot Developer**\n"
@@ -67,7 +67,7 @@ class HiringEmbed(commands.Cog):
                 "Shape the visual identity of Pi RPG — characters, environments, abilities, and animations.\n\n"
                 "## 📣 **Public Relations**\n"
                 "You’ll be the voice of Pi RPG: community engagement, social media planning, announcements.\n\n"
-                "## **You can apply/find more info on our website** 👉 https://pirpg.netlify.app/"
+                "## **You can find more info on our website** 👉 https://pirpg.netlify.app/"
             ),
             color=0xFFA500
         )
