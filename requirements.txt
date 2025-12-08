@@ -1,0 +1,11 @@
+discord.py
+python-dotenv
+apscheduler
+requests-oauthlib
+Pillow
+aiohttp
+google-api-python-client
+google-auth
+google-auth-oauthlib
+asyncpraw
+tweepy
