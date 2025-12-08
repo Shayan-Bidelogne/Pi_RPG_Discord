@@ -52,9 +52,9 @@ class HiringEmbed(commands.Cog):
         # Restore view persistante au démarrage
         self.bot.loop.create_task(self._restore_view_on_ready())
 
-    @app_commands.command(name="hiring_setup", description="Post the recruitment embed with Apply button (admin only)")
+    @app_commands.command(name="hiring", description="Post the recruitment embed with Apply button (admin only)")
     @app_commands.checks.has_permissions(administrator=True)
-    async def hiring_setup(self, interaction: discord.Interaction):
+    async def hiring(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
         embed_recruit = discord.Embed(
