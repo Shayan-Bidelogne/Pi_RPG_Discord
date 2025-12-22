@@ -10,20 +10,4 @@ TASKS_CHANNEL_ID = {
     'animation': 1401647416993906699,
 }
 CARDS = ["None", "Village", "Forest", "Crystal Forest"]
-
-# --- Modération automatique ---
-# Liste des rôles (IDs) auxquels la modération s'applique
-MOD_ROLE_IDS = [UNAUTHORIZED_ROLE_ID]
-
-# Comportement de modération (True = bloqué)
-MOD_BLOCK_MENTIONS = True
-MOD_BLOCK_LINKS = True
-
-# Mots/phrases interdits (suppressions automatiques)
-MOD_BANNED_WORDS = [
-    "badword1",
-    "badword2",
-]
-
-# Message d'avertissement post-suppression (affiché brièvement)
-MOD_WARNING_MESSAGE = "Auto-moderated"
+CARDS = ["None", "Village", "Forest", "Crystal Forest"]
