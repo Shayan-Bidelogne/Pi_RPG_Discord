@@ -1,4 +1,4 @@
-# cogs/onboarding_ticket.py
+# cogs/onboarding_auto.py
 import discord
 from discord import ui
 from discord.ext import commands
@@ -64,26 +64,32 @@ class OnboardingView(ui.View):
                     view=self
                 )
 
-class OnboardingCog(commands.Cog):
-    """Cog qui gère l'onboarding interactif des tickets."""
+class OnboardingAuto(commands.Cog):
+    """Démarre automatiquement l'onboarding dans les tickets."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="start_onboarding")
-    async def start_onboarding(self, ctx: commands.Context):
-        """Démarre l'onboarding pour l'auteur du ticket."""
-        if not isinstance(ctx.channel, discord.TextChannel):
-            await ctx.send("This command can only be used in a server text channel.")
+    @commands.Cog.listener()
+    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
+        # Vérifier que c'est un text channel
+        if not isinstance(channel, discord.TextChannel):
             return
 
-        # Onboarding réservé à la personne qui a ouvert le ticket
-        applicant = ctx.author
-        view = OnboardingView(self.bot, user=applicant)
-        await ctx.send(
-            f"Welcome {applicant.mention}! Let's start your onboarding.\n\nStep 1: Did you read all info on the website?",
-            view=view
-        )
+        # Vérifier que c'est un ticket ouvert par HiringView
+        if channel.name.startswith("ticket-"):
+            # Chercher le membre correspondant à l'auteur (nom dans le channel)
+            username = channel.name[len("ticket-"):].replace("-", " ")
+            member = discord.utils.find(lambda m: m.name.lower() == username.lower(), channel.guild.members)
+            if not member:
+                return  # pas trouvé
+
+            # Poster automatiquement l'onboarding
+            view = OnboardingView(self.bot, user=member)
+            await channel.send(
+                f"Welcome {member.mention}! Let's start your onboarding.\n\nStep 1: Did you read all info on the website?",
+                view=view
+            )
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(OnboardingCog(bot))
+    await bot.add_cog(OnboardingAuto(bot))
