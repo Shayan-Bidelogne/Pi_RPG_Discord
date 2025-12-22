@@ -4,11 +4,10 @@ from discord.ext import commands
 
 STAFF_IDS = [111111111111111111, 222222222222222222]  # Remplace par tes IDs staff
 EXISTING_MESSAGE_ID = 1447639852861624591
-EXISTING_CHANNEL_ID = 1447627589295538296
 
 class HiringView(ui.View):
     def __init__(self, bot: commands.Bot, timeout: int | None = None):
-        super().__init__(timeout=timeout)  # timeout=None pour view persistante
+        super().__init__(timeout=timeout)
         self.bot = bot
 
     @ui.button(label="Apply", custom_id="hiring_open_ticket", style=discord.ButtonStyle.primary)
@@ -18,8 +17,17 @@ class HiringView(ui.View):
         guild = interaction.guild
         applicant = interaction.user
 
-        # Nom du salon ticket sécurisé
+        # Nom sécurisé du ticket
         safe_name = f"ticket-{applicant.name}".lower().replace(" ", "-")[:90]
+
+        # 🔎 Vérifier si un ticket existe déjà avec ce nom
+        existing = discord.utils.get(guild.text_channels, name=safe_name)
+        if existing:
+            await interaction.followup.send(
+                f"⚠️ You already have an open ticket: {existing.mention}",
+                ephemeral=True
+            )
+            return
 
         # Permissions
         overwrites = {
@@ -40,8 +48,13 @@ class HiringView(ui.View):
             reason=f"Ticket opened by {applicant} via hiring button"
         )
 
-        await ticket_channel.send(f"Welcome <@{applicant.id}> — a team member will assist you shortly.")
-        await interaction.followup.send(f"✅ Ticket created: {ticket_channel.mention}", ephemeral=True)
+        await ticket_channel.send(
+            f"Welcome <@{applicant.id}> — a team member will assist you shortly."
+        )
+        await interaction.followup.send(
+            f"✅ Ticket created: {ticket_channel.mention}",
+            ephemeral=True
+        )
 
 class HiringEmbed(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -82,7 +95,10 @@ class HiringEmbed(commands.Cog):
         # ⚡ Enregistrement de la View persistante pour le nouveau message
         self.bot.add_view(view, message_id=msg.id)
 
-        await interaction.followup.send("Recruitment embed posted. Button is now persistent.", ephemeral=True)
+        await interaction.followup.send(
+            "Recruitment embed posted. Button is now persistent.",
+            ephemeral=True
+        )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(HiringEmbed(bot))
