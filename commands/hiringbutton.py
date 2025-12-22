@@ -3,7 +3,7 @@ from discord import app_commands, ui
 from discord.ext import commands
 
 STAFF_IDS = [111111111111111111, 222222222222222222]  # Remplace par tes IDs staff
-EXISTING_MESSAGE_ID = 1447639852861624591
+EXISTING_MESSAGE_ID = 1447639852861624591  # ID du message déjà posté
 
 class HiringView(ui.View):
     def __init__(self, bot: commands.Bot, timeout: int | None = None):
@@ -18,10 +18,14 @@ class HiringView(ui.View):
         applicant = interaction.user
 
         # Nom sécurisé du ticket
-        safe_name = f"ticket-{applicant.name}".lower().replace(" ", "-")[:90]
+        base_name = f"ticket-{applicant.name}".lower().replace(" ", "-")
+        safe_name = base_name[:90]
 
-        # 🔎 Vérifier si un ticket existe déjà avec ce nom
-        existing = discord.utils.get(guild.text_channels, name=safe_name)
+        # 🔎 Vérifier si un ticket existe déjà pour cet utilisateur
+        existing = discord.utils.find(
+            lambda c: c.name.startswith(base_name),
+            guild.text_channels
+        )
         if existing:
             await interaction.followup.send(
                 f"⚠️ You already have an open ticket: {existing.mention}",
@@ -35,7 +39,9 @@ class HiringView(ui.View):
             applicant: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
         }
         for staff_id in STAFF_IDS:
-            overwrites[discord.Object(id=staff_id)] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+            overwrites[discord.Object(id=staff_id)] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
 
         # Parent category si possible
         parent = interaction.channel.category if interaction.channel and isinstance(interaction.channel, discord.TextChannel) else None
@@ -88,11 +94,11 @@ class HiringEmbed(commands.Cog):
         )
         embed_recruit.timestamp = discord.utils.utcnow()
 
-        # Vue persistante
+        # Vue persistante pour le nouveau message
         view = HiringView(self.bot, timeout=None)
         msg = await interaction.channel.send(embed=embed_recruit, view=view)
 
-        # ⚡ Enregistrement de la View persistante pour le nouveau message
+        # ⚡ Enregistrement de la View persistante
         self.bot.add_view(view, message_id=msg.id)
 
         await interaction.followup.send(
