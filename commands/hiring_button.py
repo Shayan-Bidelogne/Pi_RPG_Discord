@@ -60,7 +60,7 @@ class HiringView(ui.View):
         )
 
         await ticket_channel.send(
-            f"Welcome <@{applicant.id}> — for which position are you applying?"
+            f"Welcome <@{applicant.id}> — for which position are you applying?\n Please tag the relevant @role\n And make sure to read our website [here](https://pirpg.netlify.app/)"
         )
         await interaction.followup.send(
             f"✅ Ticket created: {ticket_channel.mention}",
