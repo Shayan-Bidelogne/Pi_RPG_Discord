@@ -5,9 +5,8 @@ TICKET_CATEGORY_NAME = "Public"
 
 # Liste des rôles qui déclenchent la réaction
 ROLE_NAMES_FOR_REACTION = [
-    "Game Creator",
-    "Developer",
-    "Marketing"
+    "Pi Manager 🧿",
+    "x"
 ]
 
 # Emoji personnalisé
