@@ -17,16 +17,35 @@ MOD_BANNED_WORDS: List[str] = [
 ]
 
 # Message d'avertissement post-suppression (affiché brièvement)
-MOD_WARNING_MESSAGE: str = "Votre message a été supprimé par la modération automatique."
+MOD_WARNING_MESSAGE: str = "Auto-mod {user}! ❌"
 
 # --- Réponses automatiques ---
 # Mapping simple : déclencheur (chaîne) -> réponse (chaîne)
 # Le déclencheur est cherché dans le message (sensible à la casse selon
 # AUTO_RESPONSES_CASE_SENSITIVE). Vous pouvez utiliser des clés courtes
 # ou des phrases complètes.
-AUTO_RESPONSES: Dict[str, str] = {
-    "bonjour": "Bonjour {user}, bienvenue !",
-    "aide": "Si vous avez besoin d'aide, consultez le channel #support ou répondez ici.",
+AUTO_RESPONSE_GROUPS = {
+    "greetings": {
+        "triggers": ["bonjour", "salut", "hello", "hi", "hey"],
+        "responses": [
+            "Hi {user} !",
+            "Hello {user}",
+            "Hey {user} — how are you?",
+        ],
+        "target_role_ids": [],
+        "case_sensitive": False,
+        "daily_limit": 1,
+    },
+    "investment": {
+        "triggers": ["investment", "cryptocurrency", "money"],
+        "responses": [
+            "{user}, Pi RPG is a game not an investment",
+            "{user}, we're not providing any financial advice!",
+        ],
+        "target_role_ids": [],
+        "case_sensitive": False,
+        "daily_limit": 1,
+    },
 }
 
 # Si vide => appliqué à tous; sinon liste de role IDs contraignant l'application
@@ -38,3 +57,4 @@ AUTO_RESPONSES_CASE_SENSITIVE: bool = False
 # Si True, la réponse mentionnera l'utilisateur (en utilisant '{user}' dans la valeur)
 # Les réponses peuvent contenir le placeholder '{user}' qui sera remplacé
 # par la mention de l'auteur.
+AUTO_RESPONSE_STATE_FILE = "data/auto_response_state.json"
