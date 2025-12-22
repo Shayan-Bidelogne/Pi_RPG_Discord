@@ -36,7 +36,12 @@ class HiringView(ui.View):
         # Permissions
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            applicant: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+            applicant: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                mention_everyone=True  # ⚡ Autoriser à mentionner les rôles et everyone
+            )
         }
         for staff_id in STAFF_IDS:
             overwrites[discord.Object(id=staff_id)] = discord.PermissionOverwrite(
@@ -55,7 +60,7 @@ class HiringView(ui.View):
         )
 
         await ticket_channel.send(
-            f"Welcome <@{applicant.id}> — a team member will assist you shortly."
+            f"Welcome <@{applicant.id}> — for which position are you applying?"
         )
         await interaction.followup.send(
             f"✅ Ticket created: {ticket_channel.mention}",

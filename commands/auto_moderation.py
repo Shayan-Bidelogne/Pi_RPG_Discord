@@ -71,6 +71,10 @@ class AutoModeration(commands.Cog):
         if message.author.bot:
             return
 
+        # ⚡ Ignorer les channels de tickets
+        if isinstance(message.channel, discord.TextChannel) and message.channel.name.startswith("ticket-"):
+            return
+
         content = message.content or ""
 
         # --- Modération (s'applique uniquement si l'auteur a un rôle surveillé) ---
@@ -119,8 +123,8 @@ class AutoModeration(commands.Cog):
             return
 
         for group_name, cfg in AUTO_RESPONSE_GROUPS.items():
-            triggers = cfg.get("triggers", [])
-            responses = cfg.get("responses", [])
+            triggers = cfg.get("triggers", [] )
+            responses = cfg.get("responses", [] )
             target_role_ids = cfg.get("target_role_ids", [])
             case_sensitive = cfg.get("case_sensitive", False)
             daily_limit = cfg.get("daily_limit", 1) or 1
