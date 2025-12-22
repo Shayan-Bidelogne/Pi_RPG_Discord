@@ -1,10 +1,10 @@
 """Configuration dédiée à la modération automatique et aux réponses automatiques."""
 from typing import Dict, List
-from config import AUTHORIZED_ROLE_ID
+from config import UNAUTHORIZED_ROLE_ID
 
 # Liste des rôles (IDs) auxquels la modération s'applique
 # Remplacez par les IDs voulus (ex: [123456789012345678])
-MOD_ROLE_IDS: List[int] = [AUTHORIZED_ROLE_ID]
+MOD_ROLE_IDS: List[int] = [UNAUTHORIZED_ROLE_ID]
 
 # Comportement de modération
 MOD_BLOCK_MENTIONS: bool = True
@@ -17,7 +17,7 @@ MOD_BANNED_WORDS: List[str] = [
 ]
 
 # Message d'avertissement post-suppression (affiché brièvement)
-MOD_WARNING_MESSAGE: str = "Auto-mod {user}! ❌"
+MOD_WARNING_MESSAGE: str = "Auto-mod ❌"
 
 # --- Réponses automatiques ---
 # Mapping simple : déclencheur (chaîne) -> réponse (chaîne)
