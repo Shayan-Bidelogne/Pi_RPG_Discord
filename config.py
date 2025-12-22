@@ -1,5 +1,6 @@
 # config.py
-AUTHORIZED_ROLE_ID = 1354459284020134089
+AUTHORIZED_ROLE_ID = 1354459284020134089 
+UNAUTHORIZED_ROLE_ID = 1400684870686081045
 TOKEN = "your-token-here"
 GUILD_ID = 1354455462514262157
 TASKS_CHANNEL_ID = {
@@ -12,7 +13,7 @@ CARDS = ["None", "Village", "Forest", "Crystal Forest"]
 
 # --- Modération automatique ---
 # Liste des rôles (IDs) auxquels la modération s'applique
-MOD_ROLE_IDS = [AUTHORIZED_ROLE_ID]
+MOD_ROLE_IDS = [UNAUTHORIZED_ROLE_ID]
 
 # Comportement de modération (True = bloqué)
 MOD_BLOCK_MENTIONS = True
@@ -25,4 +26,4 @@ MOD_BANNED_WORDS = [
 ]
 
 # Message d'avertissement post-suppression (affiché brièvement)
-MOD_WARNING_MESSAGE = "Votre message a été supprimé par la modération automatique."
+MOD_WARNING_MESSAGE = "Auto-moderated"
