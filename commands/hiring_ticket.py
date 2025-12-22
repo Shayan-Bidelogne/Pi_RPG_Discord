@@ -3,7 +3,7 @@ from discord.ext import commands
 
 # IDs des rôles utilisés comme trigger (pas pour attribution)
 ROLE_IDS = {
-    "pixel_artist": 1401139679423631430,
+    "pixel_artist": 1354456280303014108,
     "dev": 1363812990566006865,
     "marketing": 1401139679423631430,
 }
