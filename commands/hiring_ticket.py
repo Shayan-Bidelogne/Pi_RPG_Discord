@@ -52,18 +52,18 @@ class TicketOnboarding(commands.Cog):
 
         # Envoyer l'onboarding personnalisé selon le rôle
         if chosen_role == "pixel_artist":
-            description = "🎨 You chose Pixel Artist! Let's start with portfolio questions..."
+            description = "🎨 You chose Pixel Artist! Can you share your portfolio or previous work?"
         elif chosen_role == "dev":
-            description = "💻 You chose Developer! We'll start with coding questions..."
+            description = "💻 You chose Developer! Can you share your coding experience or projects?"
         elif chosen_role == "marketing":
-            description = "📣 You chose Marketing! Let's talk about social media strategy..."
+            description = "📣 You chose Marketing! Let's talk about marketing!"
         else:
             description = "Welcome! Onboarding begins..."
 
         embed = discord.Embed(
             title="Pi RPG Onboarding",
             description=description,
-            color=0x00FF00
+            color=0xFFA500
         )
 
         await message.channel.send(
