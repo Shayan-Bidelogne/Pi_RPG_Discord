@@ -4,8 +4,8 @@ from discord.ext import commands
 # IDs des rôles utilisés comme trigger (pas pour attribution)
 ROLE_IDS = {
     "pixel_artist": 1354456280303014108,
-    "dev": 1363812990566006865,
-    "marketing": 1401139679423631430,
+    "dev": 1354456244827459695,
+    "marketing": 1369649449495826466,
 }
 
 # Pour suivre l'état de l'onboarding par utilisateur
@@ -52,24 +52,25 @@ class TicketOnboarding(commands.Cog):
 
         # Envoyer l'onboarding personnalisé selon le rôle
         if chosen_role == "pixel_artist":
-            description = "🎨 You chose Pixel Artist! Can you share your portfolio or previous work?"
+            description = (
+                f"🎨 {message.author.mention}, you chose Pixel Artist! "
+                "Can you share your portfolio or previous work?"
+            )
         elif chosen_role == "dev":
-            description = "💻 You chose Developer! Can you share your coding experience or projects?"
+            description = (
+                f"💻 {message.author.mention}, you chose Developer! "
+                "Can you share your coding experience or projects?"
+            )
         elif chosen_role == "marketing":
-            description = "📣 You chose Marketing! Let's talk about marketing!"
+            description = (
+                f"📣 {message.author.mention}, you chose Marketing! "
+                "Let's talk about marketing!"
+            )
         else:
-            description = "Welcome! Onboarding begins..."
+            description = f"{message.author.mention}, welcome! Onboarding begins..."
 
-        embed = discord.Embed(
-            title="Pi RPG Onboarding",
-            description=description,
-            color=0xFFA500
-        )
-
-        await message.channel.send(
-            f"✅ {message.author.mention} started onboarding for **{chosen_role.replace('_',' ').title()}**!",
-            embed=embed
-        )
+        # Envoi uniquement en message texte
+        await message.channel.send(description)
 
 
 async def setup(bot: commands.Bot):
